@@ -38,34 +38,41 @@ $ omma mcp serve
 
 ## Install
 
-### Prebuilt binary (Linux x86_64)
+### Prebuilt binaries
+
+CI builds and tests a release binary on every platform it supports, and each
+artifact carries its own `.sha256`:
+
+| Artifact | Platform |
+|---|---|
+| `omma-0.1.0-linux-x86_64` | Ubuntu, glibc ≥ 2.39 |
+| `omma-0.1.0-macos-aarch64` | macOS on Apple Silicon |
+| `omma-0.1.0-windows-x86_64.exe` | Windows x86_64 |
 
 ```sh
-install -m 755 omma-0.1.0-x86_64-linux-gnu ~/.local/bin/omma
+install -m 755 omma-0.1.0-linux-x86_64 ~/.local/bin/omma
 omma doctor
 ```
 
-The prebuilt binary is dynamically linked and needs **glibc ≥ 2.39** (Arch,
-Fedora 40+, Ubuntu 24.04 or newer). On older systems, build from source.
-
-Verify the download:
+Verify the download against the checksum published beside it:
 
 ```sh
-sha256sum -c omma-0.1.0-x86_64-linux-gnu.sha256
+sha256sum -c omma-0.1.0-linux-x86_64.sha256   # shasum -a 256 -c on macOS
 ```
 
-`omma-0.1.0-x86_64-linux-gnu.sha256`:
-`9f0bc76f59c890b712cc3251c723d91ad506d7d4585b39785781360cbb500db2`
+The Linux binary is dynamically linked and needs **glibc ≥ 2.39** (Ubuntu 24.04,
+Arch, Fedora 40 or newer). On older systems, build from source.
 
-### From source (any Linux, Rust 1.88+)
+### From source (any platform, Rust 1.88+)
 
 ```sh
 cargo build --release --locked
 install -m 755 target/release/omma ~/.local/bin/omma
 ```
 
-The build is reproducible: this release was built twice from a clean copy of the
-tree and produced the same SHA-256 both times.
+With `--locked` and the committed `Cargo.lock`, a clean checkout of this tree
+builds reproducibly: two local builds from separate directories produced the same
+SHA-256. CI builds on each platform from the same lockfile.
 
 ### Optional tools
 
@@ -75,17 +82,33 @@ tree and produced the same SHA-256 both times.
 
 ## Compatibility
 
-- Linux x86_64 (the only platform tested).
+Verified by running the suite natively on each platform (GitHub Actions, three
+jobs plus an MSRV job):
+
+| Platform | Runner | Tesseract | Tests |
+|---|---|---|---|
+| Ubuntu x86_64 | `ubuntu-latest` | 5.5.x (apt) | 68 passed |
+| macOS arm64 | `macos-latest` | 5.5.4 (brew) | 68 passed |
+| Windows x86_64 | `windows-latest` | 5.5.x (choco) | 68 passed |
+
+Those are the platforms exercised. Other targets — Linux aarch64, macOS x86_64,
+Windows ARM, the BSDs — are untested and unclaimed, though nothing in the code is
+platform-specific beyond the Tesseract lookup and the config directory fallback.
+
 - Rust 1.88 or newer to build; edition 2024.
 - Images: PNG, JPEG, WebP, BMP, GIF (first frame; animation detected), TIFF.
   SVG and other XML markup are refused.
 
 ## Testing in this release
 
-- 68 automated tests: CLI, JSON schema, decoding and limits, OCR, MCP protocol,
-  vision request construction (against a local mock), path restrictions.
+- 68 automated tests on each of the three platforms: CLI, JSON schema, decoding
+  and limits, OCR, MCP protocol, vision request construction (against a local
+  mock), path restrictions.
 - `cargo fmt --check` and `cargo clippy --all-targets --all-features -D warnings`
-  clean.
+  clean on all three.
+- The CI job also exercises the built **release binary** directly: human report,
+  JSON contract, the 4× upscale path, a region crop, stdin, exit codes, and a full
+  MCP exchange with every stdout line required to be a protocol frame.
 - MCP verified with the official TypeScript SDK client (18/18 checks) and driven
   end to end by a real agent (Control).
 - Filesystem boundary verified through a real client: outside-root, `/etc`, and a

@@ -116,41 +116,52 @@ omma IMAGE            # human report
 - [x] No secrets in the tree, in examples, or in logs.
 - [x] `~/.local/bin/see` untouched (checksum verified).
 
-## 10. Packaging and artifacts
+## 10. Cross-platform CI
+
+`.github/workflows/ci.yml`, on every push and pull request:
+
+| Job | Runner | What it does |
+|---|---|---|
+| `test` | ubuntu-latest | fmt, clippy, full suite, release build, binary smoke tests, MCP exchange |
+| `test` | macos-latest (arm64) | same |
+| `test` | windows-latest | same |
+| `msrv` | ubuntu-latest | build + compile all tests on the declared minimum (1.88.0) |
+
+- [x] Tesseract installed per platform (apt / brew / choco) and reported in the log.
+- [x] Formatting, Clippy (`-D warnings`) and the full suite pass on all three.
+- [x] The release binary — not just the test harness — is exercised on each runner:
+      human report, JSON contract, 4× upscale path, region crop, stdin, exit
+      codes, and a complete MCP exchange where every stdout line must parse as a
+      protocol frame.
+- [x] Each runner packages `omma-<version>-<platform>` plus a `.sha256` and uploads
+      it as a build artifact.
+- [ ] Artifacts are build outputs, not a published release; attaching them to a
+      GitHub release is an owner action.
+
+## 11. Packaging and artifacts
 
 - [x] `cargo package --list` includes sources, docs, examples, tests and fixtures
-      (44 files, 324 KiB; 90.8 KiB compressed) and excludes `target/` and `dist/`.
-- [x] `cargo publish --dry-run --allow-dirty` packages and compiles the crate
-      successfully; the upload is aborted by the dry run. Not published.
+      and excludes `target/` and `dist/`.
+- [x] `cargo publish --dry-run` packages and compiles the crate successfully; the
+      upload is aborted by the dry run. Not published.
 - [x] No personal paths, secrets or hostnames in the packaged tree.
-- [x] Missing `repository`/`homepage` in `Cargo.toml` is a warning only: there is
-      no public remote, and inventing a URL would be a false claim. Set both when
-      the project gets a real home.
+- [x] `repository` points at the real remote; the earlier "no documentation,
+      homepage or repository" warning is gone.
 - [x] Clean-room build: the tree copied to a fresh directory, built with
       `--locked --offline` and a separate target directory, produced a
       **bit-identical** binary (same SHA-256). `cargo test` there: 68 passed.
+- [x] Release artifacts are the CI-built binaries for the three tested platforms,
+      each with a `.sha256` beside it; verify with `sha256sum -c` (or
+      `shasum -a 256 -c` on macOS).
+- [x] The Linux artifact installed into an isolated prefix and run under `env -i`
+      with a temp `HOME` and only that prefix on `PATH`.
+- [x] Linux artifact is dynamically linked and needs **glibc ≥ 2.39**; older
+      distributions build from source (no musl toolchain is installed, and adding
+      one was not justified for this release).
+- [x] Release notes: `docs/release-notes-0.1.0.md` — highlights, install per
+      platform, compatibility matrix, testing performed, known limitations.
 
-Artifacts (in `dist/`, git-ignored, not part of the crate):
-
-```
-dist/omma-0.1.0-x86_64-linux-gnu          7,440,928 bytes, stripped
-dist/omma-0.1.0-x86_64-linux-gnu.sha256
-sha256 9f0bc76f59c890b712cc3251c723d91ad506d7d4585b39785781360cbb500db2
-```
-
-- [x] Checksum verifies (`sha256sum -c`).
-- [x] Artifact binary, `target/release/omma` and the installed
-      `~/.local/bin/omma` are the same file by hash.
-- [x] Installed into an isolated prefix and run with a clean environment
-      (`env -i`, temp `HOME`, only that prefix on `PATH`): `--version` and
-      `doctor` both work.
-- [x] Dynamically linked: requires **glibc ≥ 2.39**. Older distributions must
-      build from source; there is no static/musl artifact (no musl toolchain is
-      installed and adding one was not justified for this release).
-- [x] Release notes: `docs/release-notes-0.1.0.md` — highlights, install,
-      checksum, compatibility, testing performed, known limitations.
-
-## 11. Release
+## 12. Release
 
 ```sh
 git add -A && git commit -m "omma 0.1.0"   # needs the owner's word

@@ -77,9 +77,10 @@ $ install -m 755 target/release/omma ~/.local/bin/omma
 
 Or run it from the checkout: `cargo run -- image.png`.
 
-A prebuilt Linux x86_64 binary is produced into `dist/` by the release process
-(see [docs/release-notes-0.1.0.md](docs/release-notes-0.1.0.md)); it is
-dynamically linked and needs glibc 2.39 or newer. The source build has no such
+CI builds and tests a release binary on Ubuntu x86_64, macOS arm64 and Windows
+x86_64, and publishes it with a `.sha256` per platform (see
+[docs/release-notes-0.1.0.md](docs/release-notes-0.1.0.md)). The Linux binary is
+dynamically linked and needs glibc 2.39 or newer; the source build has no such
 constraint.
 
 ### Optional external tools
@@ -282,7 +283,9 @@ Stated plainly, because they matter more than the feature list:
   set is reported by `omma doctor` and missing ones produce warnings.
 - Not implemented: PDF pages, video frames, batch/multi-image runs, QR/barcodes,
   table or chart detection, image comparison, extra OCR or vision providers.
-- Linux is the tested platform.
+- **Platforms**: Ubuntu x86_64, macOS arm64 and Windows x86_64 are tested
+  natively on every push. Linux aarch64, macOS x86_64, Windows ARM and the BSDs
+  are untested and unclaimed.
 
 ## Security
 
@@ -308,6 +311,12 @@ $ cargo clippy --all-targets --all-features -- -D warnings
 
 Tests use small generated fixtures in `tests/fixtures/`; OCR tests skip loudly
 when Tesseract is absent, and the vision tests use a local mock server.
+
+`.github/workflows/ci.yml` runs the same checks natively on Ubuntu, macOS and
+Windows — formatting, Clippy, the full suite, a release build, and smoke tests of
+that release binary including a complete MCP exchange — plus an MSRV job that
+builds on the declared minimum Rust. `ci/*.mjs` are the Node helpers those smoke
+tests use; they are CI-only and not part of the crate.
 
 Before a release, work through [docs/release.md](docs/release.md).
 
