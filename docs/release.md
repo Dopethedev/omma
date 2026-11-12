@@ -125,7 +125,7 @@ omma IMAGE            # human report
 | `test` | ubuntu-latest | fmt, clippy, full suite, release build, binary smoke tests, MCP exchange |
 | `test` | macos-latest (arm64) | same |
 | `test` | windows-latest | same |
-| `msrv` | ubuntu-latest | build + compile all tests on the declared minimum (1.88.0) |
+| `msrv` | ubuntu-latest | build + compile all tests on the declared minimum (1.89.0) |
 
 - [x] Tesseract installed per platform (apt / brew / choco) and reported in the log.
 - [x] Formatting, Clippy (`-D warnings`) and the full suite pass on all three.

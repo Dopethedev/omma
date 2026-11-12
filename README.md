@@ -68,7 +68,7 @@ only in the MCP adapter.
 
 ## Install
 
-Requires Rust 1.88+.
+Requires Rust 1.89+.
 
 ```console
 $ cargo build --release --locked

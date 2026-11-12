@@ -2,7 +2,7 @@
 name = "omma"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 description = "Turn an image into structured text an AI agent can reason about"
 repository = "https://github.com/Dopethedev/omma"
 license = "MIT OR Apache-2.0"

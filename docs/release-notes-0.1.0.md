@@ -63,7 +63,7 @@ sha256sum -c omma-0.1.0-linux-x86_64.sha256   # shasum -a 256 -c on macOS
 The Linux binary is dynamically linked and needs **glibc ≥ 2.39** (Ubuntu 24.04,
 Arch, Fedora 40 or newer). On older systems, build from source.
 
-### From source (any platform, Rust 1.88+)
+### From source (any platform, Rust 1.89+)
 
 ```sh
 cargo build --release --locked
@@ -95,7 +95,8 @@ Those are the platforms exercised. Other targets — Linux aarch64, macOS x86_64
 Windows ARM, the BSDs — are untested and unclaimed, though nothing in the code is
 platform-specific beyond the Tesseract lookup and the config directory fallback.
 
-- Rust 1.88 or newer to build; edition 2024.
+- Rust 1.89 or newer to build (verified in CI); edition 2024. The floor comes
+  from a transitive dependency of the MCP library, not from this crate.
 - Images: PNG, JPEG, WebP, BMP, GIF (first frame; animation detected), TIFF.
   SVG and other XML markup are refused.
 

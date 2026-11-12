@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["1.88.0"]
+        toolchain: ["1.89.0"]
     steps:
       - uses: actions/checkout@v4
 
