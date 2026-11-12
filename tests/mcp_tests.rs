@@ -224,9 +224,11 @@ fn a_missing_file_is_a_tool_error_not_a_crash() {
 fn allowed_directories_restrict_what_can_be_read() {
     let allowed = temp_path("allowed-root");
     std::fs::create_dir_all(&allowed).expect("mkdir");
+    // TOML basic strings treat `\` as an escape, so a Windows path must be
+    // written with forward slashes (which Windows APIs accept).
+    let allowed_toml = allowed.to_string_lossy().replace('\\', "/");
     let config = write_config(&format!(
-        "[mcp]\nallowed_directories = [\"{}\"]\n",
-        allowed.display()
+        "[mcp]\nallowed_directories = [\"{allowed_toml}\"]\n"
     ));
     let mut session = Session::start(&["--config", &config]);
     session.initialize();
