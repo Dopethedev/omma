@@ -337,7 +337,10 @@ fn exe_names(name: &str) -> Vec<String> {
     let mut names = vec![format!("{name}.exe")];
     if let Some(pathext) = std::env::var_os("PATHEXT") {
         for ext in std::env::split_paths(&pathext) {
-            let ext = ext.to_string_lossy().trim_start_matches('.').to_ascii_lowercase();
+            let ext = ext
+                .to_string_lossy()
+                .trim_start_matches('.')
+                .to_ascii_lowercase();
             if ext == "exe" || ext.is_empty() {
                 continue;
             }
