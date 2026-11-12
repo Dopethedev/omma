@@ -171,10 +171,12 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then name="$name.exe"; fi
           mkdir -p dist
           cp "$OMMA_BIN" "dist/$name"
+          # Write the checksum inside dist/ so the file holds a bare filename that
+          # verifies from wherever the artifact is unpacked.
           if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "dist/$name" > "dist/$name.sha256"
+            (cd dist && sha256sum "$name" > "$name.sha256")
           else
-            shasum -a 256 "dist/$name" > "dist/$name.sha256"
+            (cd dist && shasum -a 256 "$name" > "$name.sha256")
           fi
           cat "dist/$name.sha256"
 
