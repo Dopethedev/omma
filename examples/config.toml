@@ -1,0 +1,48 @@
+# OMMA configuration — every key is optional; these are the defaults.
+# Location: $XDG_CONFIG_HOME/omma/config.toml or ~/.config/omma/config.toml
+
+[general]
+default_format = "text"
+max_file_size_mb = 32
+max_pixels = 40000000
+max_dimension = 16384
+max_alloc_mb = 256
+
+[ocr]
+enabled = true
+languages = ["eng"]
+timeout_seconds = 30
+upscale_small_crops = true
+small_crop_height = 120
+upscale_factor = 4
+min_confidence = 40.0
+
+[colors]
+enabled = true
+max_colors = 6
+grid_width = 64
+grid_height = 36
+quantization_bits = 5
+
+[layout]
+enabled = true
+
+# Optional local vision model. Any OpenAI-compatible server works:
+#   Ollama        http://127.0.0.1:11434/v1/chat/completions
+#   llama.cpp     http://127.0.0.1:8080/v1/chat/completions
+#   LM Studio     http://127.0.0.1:1234/v1/chat/completions
+[vision]
+enabled = false
+endpoint = "http://127.0.0.1:11434/v1/chat/completions"
+model = ""
+timeout_seconds = 120
+max_tokens = 400
+allow_remote = false
+
+# Restrict which paths the MCP server may read. Empty means any path this
+# process can read — fine for a single-user desktop, wrong for anything shared.
+[mcp]
+allowed_directories = []
+
+[logging]
+level = "warn"

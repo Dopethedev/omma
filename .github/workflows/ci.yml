@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Tesseract (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+
+      - name: Install Tesseract (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tesseract
+
+      - name: Install Tesseract (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install tesseract --no-progress -y
+          $tess = "C:\Program Files\Tesseract-OCR"
+          if (Test-Path $tess) {
+            $tess | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $env:PATH = "$tess;$env:PATH"
+          }
+
+      - name: Backend report
+        shell: bash
+        run: |
+          rustc --version
+          cargo --version
+          echo "tesseract at: $(command -v tesseract || echo MISSING)"
+          tesseract --version 2>&1 | head -2 || true
+          tesseract --list-langs 2>&1 || true
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Tests (unit, CLI, JSON, OCR, MCP, vision)
+        run: cargo test --locked
+
+      - name: Release build
+        run: cargo build --release --locked
+
+      - name: CLI, OCR and JSON smoke test on the release binary
+        shell: bash
+        env:
+          OMMA_BIN: ${{ runner.os == 'Windows' && 'target/release/omma.exe' || 'target/release/omma' }}
+        run: |
+          set -euo pipefail
+          "$OMMA_BIN" --version
+          "$OMMA_BIN" doctor
+
+          # Human report
+          "$OMMA_BIN" tests/fixtures/text.png > omma-text.txt
+          grep -q "Omma reads this line" omma-text.txt
+          grep -q "colour grid" omma-text.txt
+
+          # JSON contract
+          "$OMMA_BIN" tests/fixtures/text.png --json > omma.json
+          node ./ci/check-json.mjs omma.json full
+
+          # Small crop takes the 4x upscale path
+          "$OMMA_BIN" tests/fixtures/text_small.png --json > omma-small.json
+          node ./ci/check-json.mjs omma-small.json small
+
+          # Region crop
+          "$OMMA_BIN" tests/fixtures/text.png --region 10,10,200,80 --json > omma-region.json
+          node ./ci/check-json.mjs omma-region.json region
+
+          # stdin
+          "$OMMA_BIN" - --json --no-ocr < tests/fixtures/text.png > omma-stdin.json
+          node ./ci/check-json.mjs omma-stdin.json stdin
+
+          # Exit codes
+          if "$OMMA_BIN" /definitely/not/here.png; then
+            echo "::error::a missing file must fail"
+            exit 1
+          fi
+          "$OMMA_BIN" tests/fixtures/text.png --region 1,2,3 >/dev/null 2>&1 && { echo "::error::bad region must fail"; exit 1; } || true
+
+      - name: MCP stdio smoke test on the release binary
+        shell: bash
+        env:
+          OMMA_BIN: ${{ runner.os == 'Windows' && 'target/release/omma.exe' || 'target/release/omma' }}
+        run: node ./ci/mcp-smoke.mjs
+
+      - name: Package the binary
+        shell: bash
+        env:
+          OMMA_BIN: ${{ runner.os == 'Windows' && 'target/release/omma.exe' || 'target/release/omma' }}
+        run: |
+          set -euo pipefail
+          version=$("$OMMA_BIN" --version | awk '{print $2}')
+          case "$RUNNER_OS" in
+            Linux)   target=linux-x86_64 ;;
+            macOS)   target=macos-$(uname -m | sed 's/^x86_64$/x86_64/; s/^arm64$/aarch64/') ;;
+            Windows) target=windows-x86_64 ;;
+            *)       target=unknown ;;
+          esac
+          name="omma-$version-$target"
+          if [ "$RUNNER_OS" = "Windows" ]; then name="$name.exe"; fi
+          mkdir -p dist
+          cp "$OMMA_BIN" "dist/$name"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "dist/$name" > "dist/$name.sha256"
+          else
+            shasum -a 256 "dist/$name" > "dist/$name.sha256"
+          fi
+          cat "dist/$name.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omma-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error

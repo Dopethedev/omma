@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "omma": {
+      "command": "omma",
+      "args": ["mcp", "serve"]
+    },
+    "omma-restricted": {
+      "command": "/home/you/.local/bin/omma",
+      "args": ["mcp", "serve", "--config", "/home/you/.config/omma/config.toml"]
+    }
+  }
+}
