@@ -2,6 +2,7 @@
 //! can reason about, locally, with measured data separated from interpretation.
 
 pub mod analysis;
+pub mod base64;
 pub mod cli;
 pub mod config;
 pub mod doctor;

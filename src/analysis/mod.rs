@@ -21,6 +21,8 @@ pub struct Options {
     pub region: Option<String>,
     /// Directories a path must resolve inside; empty means no restriction.
     pub allowed_directories: Vec<std::path::PathBuf>,
+    /// Media type declared by an inline caller; the bytes still decide the format.
+    pub declared_mime: Option<String>,
 }
 
 impl Default for Options {
@@ -32,23 +34,68 @@ impl Default for Options {
             ask: None,
             region: None,
             allowed_directories: Vec::new(),
+            declared_mime: None,
         }
     }
 }
 
 pub fn run(source: &str, config: &Config, options: &Options) -> Result<Report> {
-    let started = Instant::now();
-    let mut warnings = Vec::new();
-
     if !options.allowed_directories.is_empty() {
         crate::input::enforce_allowed_roots(source, &options.allowed_directories)?;
     }
+    let (bytes, file_size) = input::read_bytes(source, config.max_file_size_bytes())?;
+    run_bytes(source, bytes, file_size, config, options)
+}
 
-    let bytes = input::read_bytes(source, config.max_file_size_bytes())?;
-    let (bytes, file_size) = bytes;
+/// Analyze bytes the caller already holds (MCP `image_base64`): no path is read,
+/// so the filesystem policy does not apply and cannot be bypassed here.
+pub fn run_inline(bytes: Vec<u8>, config: &Config, options: &Options) -> Result<Report> {
+    let size = bytes.len() as u64;
+    let limit = config.max_file_size_bytes();
+    if size == 0 {
+        return Err(crate::error::Error::EmptyInput);
+    }
+    if size > limit {
+        return Err(crate::error::Error::TooLarge { size, limit });
+    }
+    run_bytes("inline", bytes, size, config, options)
+}
+
+fn run_bytes(
+    source: &str,
+    bytes: Vec<u8>,
+    file_size: u64,
+    config: &Config,
+    options: &Options,
+) -> Result<Report> {
+    let started = Instant::now();
+    let mut warnings = Vec::new();
 
     let decode_started = Instant::now();
     let mut decoded = input::decode(source, bytes, file_size, config)?;
+    if let Some(declared) = &options.declared_mime {
+        let detected = decoded.format_name();
+        let claimed = declared
+            .split('/')
+            .next_back()
+            .unwrap_or(declared)
+            .trim()
+            .to_ascii_lowercase();
+        let claimed = if claimed == "jpg" {
+            "jpeg".to_string()
+        } else {
+            claimed
+        };
+        if !claimed.is_empty() && claimed != detected {
+            warnings.push(Warning {
+                code: "image_mime_mismatch",
+                message: format!(
+                    "declared media type {declared:?} does not match the content, which is {detected}; the content wins"
+                ),
+            });
+        }
+    }
+
     if let Some(spec) = &options.region {
         let (image, region) = input::crop(decoded.image, spec)?;
         decoded.image = image;
@@ -83,10 +130,10 @@ pub fn run(source: &str, config: &Config, options: &Options) -> Result<Report> {
     let colors_out = if options.colors {
         let started = Instant::now();
         let result = colors::analyze(&decoded.image, config);
-        if let Some(warning) = &result.warning {
-            warnings.push(warning.clone());
-        }
         stages.colors = started.elapsed().as_millis() as u64;
+        if let Some(warning) = result.warning.clone() {
+            warnings.push(warning);
+        }
         Some(result)
     } else {
         None
@@ -123,8 +170,7 @@ pub fn run(source: &str, config: &Config, options: &Options) -> Result<Report> {
     let vision_out = match &options.ask {
         Some(question) => {
             let started = Instant::now();
-            let png = decoded.png_bytes()?;
-            let result = vision::ask(&png, question, &config.vision);
+            let result = vision::ask(&decoded.image, question, &config.vision);
             stages.vision = started.elapsed().as_millis() as u64;
             match result {
                 Ok(mut out) => {

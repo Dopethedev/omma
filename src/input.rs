@@ -304,10 +304,15 @@ impl Decoded {
     /// Encode the analyzed image as PNG, in memory. OCR is fed through stdin so
     /// no temporary file is ever written.
     pub fn png_bytes(&self) -> Result<Vec<u8>> {
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        self.image
-            .write_to(&mut buffer, ImageFormat::Png)
-            .map_err(|err| Error::Decode(format!("cannot re-encode image: {err}")))?;
-        Ok(buffer.into_inner())
+        encode_png(&self.image).map_err(Error::Decode)
     }
+}
+
+/// Re-encode a decoded image as PNG; shared by OCR and the vision upload.
+pub fn encode_png(image: &DynamicImage) -> std::result::Result<Vec<u8>, String> {
+    let mut buffer = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut buffer, ImageFormat::Png)
+        .map_err(|err| format!("cannot re-encode image: {err}"))?;
+    Ok(buffer.into_inner())
 }

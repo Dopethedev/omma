@@ -152,8 +152,6 @@ impl AnalyzeArgs {
             None => None,
         };
         if self.json {
-            // `--json` is documented as an alias; contradicting it silently
-            // printed a human report to a caller that asked for JSON.
             if named == Some(OutputFormat::Text) {
                 return Err(Error::Usage(
                     "--json and --format text contradict each other".to_string(),

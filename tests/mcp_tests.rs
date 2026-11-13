@@ -150,7 +150,25 @@ fn tools_are_discoverable_with_schemas() {
         .iter()
         .find(|tool| tool["name"] == "analyze_image")
         .unwrap();
-    assert_eq!(analyze["inputSchema"]["required"][0], "image_path");
+    assert_eq!(
+        analyze["inputSchema"]["required"].as_array().unwrap().len(),
+        0
+    );
+    // Either source is acceptable, but a caller must supply one of them.
+    let branches = analyze["inputSchema"]["oneOf"].as_array().expect("oneOf");
+    assert_eq!(branches.len(), 2);
+    assert!(
+        branches
+            .iter()
+            .any(|branch| branch["required"][0] == "image_path")
+    );
+    assert!(
+        branches
+            .iter()
+            .any(|branch| branch["required"][0] == "image_base64")
+    );
+    assert!(analyze["inputSchema"]["properties"]["image_base64"].is_object());
+    assert!(analyze["inputSchema"]["properties"]["mime_type"].is_object());
     assert_eq!(analyze["annotations"]["readOnlyHint"], true);
     assert_eq!(analyze["annotations"]["idempotentHint"], true);
 }
@@ -288,4 +306,175 @@ fn stdin_is_not_an_image_source_over_mcp() {
         .as_str()
         .unwrap_or_default();
     assert!(text.contains("stdin"), "{text}");
+}
+
+// --- inline images (image_base64) ---------------------------------------
+
+fn fixture_base64(name: &str) -> String {
+    let bytes = std::fs::read(fixture(name)).expect("fixture bytes");
+    omma::base64::encode(&bytes)
+}
+
+#[test]
+fn an_inline_image_is_analyzed_without_touching_the_filesystem() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+    let response = session.call(
+        2,
+        "analyze_image",
+        json!({ "image_base64": fixture_base64("text.png") }),
+    );
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    let report: Value = serde_json::from_str(
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .expect("text content"),
+    )
+    .expect("report json");
+    assert_eq!(report["image"]["filename"], "inline");
+    assert_eq!(report["image"]["width"], 600);
+    assert_eq!(report["image"]["format"], "png");
+    assert!(
+        report["ocr"]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("omma reads this line"),
+        "{}",
+        report["ocr"]["text"]
+    );
+    // Same decoder and limits as a file: the grid is still 64x36.
+    assert_eq!(report["grid"]["width"], 64);
+}
+
+#[test]
+fn an_inline_data_uri_is_accepted() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+    let uri = format!("data:image/png;base64,{}", fixture_base64("solid.png"));
+    let response = session.call(2, "analyze_image", json!({ "image_base64": uri }));
+    assert_eq!(response["result"]["isError"], false, "{response}");
+}
+
+#[test]
+fn exactly_one_image_source_is_required() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+    let both = session.call(
+        2,
+        "analyze_image",
+        json!({
+            "image_path": fixture("text.png"),
+            "image_base64": fixture_base64("text.png")
+        }),
+    );
+    assert_eq!(both["result"]["isError"], true, "{both}");
+    assert!(
+        both["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("exactly one")
+    );
+
+    let neither = session.call(3, "analyze_image", json!({ "ocr": true }));
+    assert_eq!(neither["result"]["isError"], true, "{neither}");
+    assert!(
+        neither["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("image_path or image_base64")
+    );
+}
+
+#[test]
+fn malformed_inline_payloads_are_refused() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+
+    let garbage = session.call(
+        2,
+        "analyze_image",
+        json!({ "image_base64": "not base64 !!" }),
+    );
+    assert_eq!(garbage["result"]["isError"], true, "{garbage}");
+    assert!(
+        garbage["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("base64"),
+        "{garbage}"
+    );
+
+    // Valid base64 that is not an image.
+    let not_an_image = omma::base64::encode(b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+    let markup = session.call(3, "analyze_image", json!({ "image_base64": not_an_image }));
+    assert_eq!(markup["result"]["isError"], true, "{markup}");
+    assert!(
+        markup["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("markup"),
+        "{markup}"
+    );
+}
+
+#[test]
+fn an_inline_payload_over_the_size_limit_is_refused() {
+    // Same limit as a file: one megabyte.
+    let config = write_config("[general]\nmax_file_size_mb = 1\n");
+    let mut session = Session::start(&["--config", &config]);
+    session.initialize();
+    let payload = omma::base64::encode(&vec![0x41u8; 1_500_000]);
+    let response = session.call(2, "analyze_image", json!({ "image_base64": payload }));
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(text.contains("limit"), "{text}");
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn a_disagreeing_mime_type_is_a_warning_not_an_error() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+    let response = session.call(
+        2,
+        "analyze_image",
+        json!({
+            "image_base64": fixture_base64("text.png"),
+            "mime_type": "image/jpeg"
+        }),
+    );
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    let report: Value = serde_json::from_str(
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .expect("text content"),
+    )
+    .expect("report json");
+    assert_eq!(report["image"]["format"], "png", "the bytes decide");
+    let codes: Vec<&str> = report["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|warning| warning["code"].as_str())
+        .collect();
+    assert!(codes.contains(&"image_mime_mismatch"), "{codes:?}");
+}
+
+#[test]
+fn inline_input_works_even_when_directories_are_restricted() {
+    // The restriction governs paths. An inline image is bytes the client already
+    // holds, so it needs no filesystem permission and grants none.
+    let config = write_config("[mcp]\nallowed_directories = [\"/nonexistent-root\"]\n");
+    let mut session = Session::start(&["--config", &config]);
+    session.initialize();
+    let response = session.call(
+        2,
+        "analyze_image",
+        json!({ "image_base64": fixture_base64("solid.png") }),
+    );
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    let _ = std::fs::remove_file(config);
 }

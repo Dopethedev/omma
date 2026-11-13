@@ -38,6 +38,9 @@ model = ""
 timeout_seconds = 120
 max_tokens = 400
 allow_remote = false
+# Longest side uploaded to the model; larger images are downscaled first.
+max_image_dimension = 1280
+max_request_mb = 6
 
 # Restrict which paths the MCP server may read. Empty means any path this
 # process can read — fine for a single-user desktop, wrong for anything shared.

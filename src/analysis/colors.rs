@@ -73,7 +73,7 @@ pub fn hex(rgb: [u8; 3]) -> String {
 pub struct ColorsResult {
     pub colors: Colors,
     pub grid: Grid,
-    /// Set when nothing was opaque: the statistics are placeholders, not black.
+    /// Set when every sample was transparent, so the palette describes nothing.
     pub warning: Option<Warning>,
 }
 
@@ -114,8 +114,12 @@ pub fn analyze(image: &DynamicImage, config: &Config) -> ColorsResult {
 
     let warning = (total == 0).then(|| Warning {
         code: "colors_no_opaque_samples",
-        message: "every sampled pixel was transparent, so the palette is empty and average_rgb, brightness and saturation are placeholders rather than a black image"
-            .to_string(),
+        message: format!(
+            "every one of the {} sampled pixels was transparent (alpha below \
+             {ALPHA_THRESHOLD}/255), so there is no palette: average colour [0,0,0] and \
+             brightness 0 are placeholders, not black",
+            palette_source.cells.len()
+        ),
     });
 
     let colors = Colors {

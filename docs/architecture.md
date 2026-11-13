@@ -16,7 +16,8 @@ src/
 │   ├── colors.rs      sampling, quantization, palette, statistics, grid
 │   ├── ocr.rs         tesseract subprocess, passes, TSV hierarchy
 │   └── layout.rs      text regions, position labels, reading order
-├── vision.rs          OpenAI-compatible provider, endpoint policy, base64
+├── vision.rs          OpenAI-compatible provider, endpoint policy, upload sizing
+├── base64.rs          encoder for uploads, strict decoder for inline images
 ├── output/
 │   ├── mod.rs         pick a presentation
 │   ├── json.rs        compact or pretty JSON

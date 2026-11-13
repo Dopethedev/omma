@@ -24,7 +24,15 @@ const ANALYZE_SCHEMA: &str = r#"{
   "properties": {
     "image_path": {
       "type": "string",
-      "description": "Path to a local image file. Must resolve inside an allowed directory when any are configured."
+      "description": "Path to a local image file. Must resolve inside an allowed directory when any are configured. Supply exactly one of image_path or image_base64."
+    },
+    "image_base64": {
+      "type": "string",
+      "description": "Image bytes encoded as base64 (a data: URI is also accepted). Supply exactly one of image_path or image_base64. The real format is read from the bytes, never from mime_type or a file extension."
+    },
+    "mime_type": {
+      "type": "string",
+      "description": "Optional declared media type, e.g. image/png. Only checked against the detected format and reported as a warning when it disagrees."
     },
     "ocr": { "type": "boolean", "default": true, "description": "Run OCR (Tesseract, if installed)." },
     "colors": { "type": "boolean", "default": true, "description": "Run colour analysis and the spatial grid." },
@@ -35,7 +43,8 @@ const ANALYZE_SCHEMA: &str = r#"{
     "max_colors": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Number of dominant colours." },
     "region": { "type": "string", "description": "Crop to analyze: X,Y,W,H in source pixels." }
   },
-  "required": ["image_path"],
+  "required": [],
+  "oneOf": [{ "required": ["image_path"] }, { "required": ["image_base64"] }],
   "additionalProperties": false
 }"#;
 
@@ -69,7 +78,12 @@ struct OmmaServer {
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AnalyzeParams {
-    image_path: String,
+    #[serde(default)]
+    image_path: Option<String>,
+    #[serde(default)]
+    image_base64: Option<String>,
+    #[serde(default)]
+    mime_type: Option<String>,
     #[serde(default)]
     ocr: Option<bool>,
     #[serde(default)]
@@ -191,18 +205,40 @@ impl OmmaServer {
             ask,
             region: params.region.clone(),
             allowed_directories: config.mcp.allowed_directories.clone(),
+            declared_mime: params.mime_type.clone(),
         };
 
-        let path = params.image_path;
-        // stdin is the protocol channel here: reading it would swallow client
-        // frames and block the request forever.
-        if path.trim().is_empty() || path == "-" {
-            return Ok(tool_error(
-                "image_path must be a file path; stdin is not available over MCP",
-            ));
-        }
-        let joined =
-            tokio::task::spawn_blocking(move || analysis::run(&path, &config, &options)).await;
+        let source = match (params.image_path, params.image_base64) {
+            (Some(_), Some(_)) => {
+                return Ok(tool_error(
+                    "give exactly one of image_path or image_base64, not both",
+                ));
+            }
+            (None, None) => {
+                return Ok(tool_error("analyze_image needs image_path or image_base64"));
+            }
+            (Some(path), None) => {
+                // stdin is the protocol channel here: reading it would swallow
+                // client frames and block the request forever.
+                if path.trim().is_empty() || path == "-" {
+                    return Ok(tool_error(
+                        "image_path must be a file path; stdin is not available over MCP",
+                    ));
+                }
+                Source::Path(path)
+            }
+            (None, Some(encoded)) => Source::Inline(encoded),
+        };
+
+        let joined = tokio::task::spawn_blocking(move || match source {
+            Source::Path(path) => analysis::run(&path, &config, &options),
+            Source::Inline(encoded) => {
+                let bytes = crate::base64::decode(&encoded, config.max_file_size_bytes())
+                    .map_err(|err| crate::error::Error::Usage(format!("image_base64: {err}")))?;
+                analysis::run_inline(bytes, &config, &options)
+            }
+        })
+        .await;
 
         match joined {
             Ok(Ok(report)) => match serde_json::to_value(&report) {
@@ -273,6 +309,11 @@ impl OmmaServer {
 
 fn schema(raw: &str) -> Arc<JsonObject> {
     Arc::new(serde_json::from_str(raw).unwrap_or_default())
+}
+
+enum Source {
+    Path(String),
+    Inline(String),
 }
 
 fn tool_success(value: serde_json::Value) -> CallToolResult {

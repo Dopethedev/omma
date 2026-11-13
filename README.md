@@ -137,7 +137,7 @@ documented in [docs/json-schema.md](docs/json-schema.md).
 ```json
 {
   "schema_version": "1.0",
-  "tool": { "name": "omma", "version": "0.1.0" },
+  "tool": { "name": "omma", "version": "0.2.0" },
   "image": {
     "filename": "screenshot.png", "format": "png",
     "width": 779, "height": 337, "aspect_ratio": 2.3116,
@@ -197,7 +197,8 @@ Rules that hold across the schema:
 
 Two tools:
 
-- **`analyze_image`** — `image_path` (required), plus `ocr`, `colors`, `layout`,
+- **`analyze_image`** — one image source: `image_path` **or** `image_base64`
+  (inline bytes, data URI accepted), plus `mime_type`, `ocr`, `colors`, `layout`,
   `vision`, `ask`, `language`, `max_colors`, `region`. Returns the same JSON,
   both as text content and as structured content.
 - **`omma_capabilities`** — backends, formats, limits, schema version.
@@ -210,7 +211,18 @@ Generic client configuration:
     "omma": { "command": "omma", "args": ["mcp", "serve"] }
   }
 }
+
+An agent that holds the bytes can skip the filesystem entirely:
+
+```json
+{ "name": "analyze_image",
+  "arguments": { "image_base64": "iVBORw0KGgo…", "ask": "What is this?" } }
 ```
+
+Inline images go through the same decoder and the same limits as a file, no
+temporary file is written, and supplying both sources (or neither) is an error.
+Whether a chat client forwards a pasted image to a tool is the client's decision —
+see [docs/mcp.md](docs/mcp.md).
 
 Details, including the filesystem restrictions, are in [docs/mcp.md](docs/mcp.md).
 
@@ -229,6 +241,21 @@ model = "qwen2.5vl:7b"
 The same works with llama.cpp's server or LM Studio — anything that accepts an
 OpenAI `image_url` content part. A non-loopback endpoint is refused unless
 `vision.allow_remote = true` is set explicitly. Redirects are never followed.
+
+With a model configured, one call returns everything: description, objects and
+their positions, OCR text, palette, grid and layout, each marked untrusted where
+it is model- or image-derived.
+
+```sh
+omma photo.jpg --ask "What is happening here?" --json     # answer in .vision
+omma chart.png --ask "Explain the trend and the visible values."
+omma ui.png    --vision                                   # default question
+```
+
+Large images are downscaled before upload (`vision.max_image_dimension`, 1280 by
+default; `vision.max_request_mb`, 6 MiB) — the analysis still describes the
+full-size image, and `vision.sent_width`/`sent_height` report what the model
+actually saw. Setup, hardware guidance and honest limits: [docs/vision.md](docs/vision.md).
 
 ## Configuration
 

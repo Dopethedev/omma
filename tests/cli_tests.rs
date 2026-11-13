@@ -243,7 +243,7 @@ fn doctor_reports_backends_and_limits() {
     let output = run(&["doctor"]);
     assert_eq!(code(&output), 0);
     let text = stdout_text(&output);
-    assert!(text.contains("omma 0.1.0"));
+    assert!(text.contains(&format!("omma {}", env!("CARGO_PKG_VERSION"))));
     assert!(text.contains("tesseract") || text.contains("tesseract not found"));
     assert!(text.contains("limits:"));
     assert!(text.contains("mcp: stdio transport"));
@@ -273,8 +273,8 @@ fn non_image_bytes_are_rejected() {
 
 #[test]
 fn json_and_format_text_contradict_each_other() {
-    // `--json` is documented as an alias for `--format json`; silently emitting a
-    // human report to a caller that asked for JSON is a trap.
+    // `--json` is documented as an alias for `--format json`; silently emitting
+    // text when the caller asked for JSON is a trap.
     let output = run(&[&fixture("solid.png"), "--json", "--format", "text"]);
     assert_eq!(code(&output), 2, "{}", stderr_text(&output));
     assert!(

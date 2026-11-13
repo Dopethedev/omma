@@ -52,6 +52,11 @@ endpoint = "http://127.0.0.1:11434/v1/chat/completions"
 model = ""
 timeout_seconds = 120
 max_tokens = 400
+# Upload sizing: the model sees at most this many pixels on the long side and the
+# encoded PNG never exceeds max_request_mb. The report still describes the
+# original image and records what was sent in vision.sent_width/sent_height.
+max_image_dimension = 1280
+max_request_mb = 6
 api_key = ""                # optional; or OMMA_VISION_API_KEY
 allow_remote = false        # true permits a non-loopback endpoint
 
@@ -85,6 +90,8 @@ Every section and key is optional.
 | `OMMA_VISION_MODEL` | `vision.model` |
 | `OMMA_VISION_TIMEOUT_SECONDS` | `vision.timeout_seconds` |
 | `OMMA_VISION_MAX_TOKENS` | `vision.max_tokens` |
+| `OMMA_VISION_MAX_DIMENSION` | `vision.max_image_dimension` |
+| `OMMA_VISION_MAX_REQUEST_MB` | `vision.max_request_mb` |
 | `OMMA_VISION_API_KEY` | `vision.api_key` |
 | `OMMA_VISION_ALLOW_REMOTE` | `vision.allow_remote` |
 | `OMMA_LOG_LEVEL` | `logging.level` |

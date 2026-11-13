@@ -212,6 +212,12 @@ pub struct VisionOut {
     pub question: String,
     pub description: String,
     pub duration_ms: u64,
+    /// Size of the image actually uploaded, after any downscale.
+    pub sent_width: u32,
+    pub sent_height: u32,
+    #[serde(default)]
+    pub downscaled: bool,
+    pub request_bytes: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]

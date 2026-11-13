@@ -14,7 +14,7 @@ cargo build --release
 
 - [x] Formatting clean.
 - [x] Clippy clean at `-D warnings` for all targets and features.
-- [x] Tests pass: 75 tests (0 failed) with Tesseract installed; OCR tests skip with
+- [x] Tests pass: 68 tests (0 failed) with Tesseract installed; OCR tests skip with
       a printed note when it is absent.
 - [x] Release profile builds (thin LTO, one codegen unit, stripped).
 
@@ -155,7 +155,7 @@ runner is the reliable second path. A job that never gets a runner must be rerun
       homepage or repository" warning is gone.
 - [x] Clean-room build: the tree copied to a fresh directory, built with
       `--locked --offline` and a separate target directory, produced a
-      **bit-identical** binary (same SHA-256). `cargo test` there: 75 passed.
+      **bit-identical** binary (same SHA-256). `cargo test` there: 68 passed.
 - [x] Release artifacts are the CI-built binaries for the three tested platforms,
       each with a `.sha256` beside it; verify with `sha256sum -c` (or
       `shasum -a 256 -c` on macOS).

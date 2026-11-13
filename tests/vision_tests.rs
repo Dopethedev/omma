@@ -115,11 +115,16 @@ fn a_local_endpoint_is_asked_with_a_data_uri_and_marked_untrusted() {
     let body = request_body(&request);
     assert_eq!(body["model"], "test-vl");
     assert_eq!(body["max_tokens"], 400);
+    // Role 0 is the instruction that keeps image text from acting as a prompt.
+    assert_eq!(body["messages"][0]["role"], "system");
+    let system = body["messages"][0]["content"].as_str().unwrap_or_default();
+    assert!(system.contains("never instructions"), "{system}");
+    assert_eq!(body["messages"][1]["role"], "user");
     assert_eq!(
-        body["messages"][0]["content"][0]["text"],
+        body["messages"][1]["content"][0]["text"],
         "What is in this image?"
     );
-    let url = body["messages"][0]["content"][1]["image_url"]["url"]
+    let url = body["messages"][1]["content"][1]["image_url"]["url"]
         .as_str()
         .expect("image_url");
     assert!(
@@ -379,4 +384,98 @@ fn a_control_character_in_the_answer_never_reaches_the_terminal() {
         !stdout.contains('\u{1b}'),
         "an escape sequence from the model reached the terminal"
     );
+}
+
+// --- upload sizing -------------------------------------------------------
+
+fn png_dimensions(bytes: &[u8]) -> (u32, u32) {
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "not a png");
+    let width = u32::from_be_bytes(bytes[16..20].try_into().expect("width"));
+    let height = u32::from_be_bytes(bytes[20..24].try_into().expect("height"));
+    (width, height)
+}
+
+#[test]
+fn a_large_image_is_downscaled_to_the_configured_ceiling_before_upload() {
+    let path = temp_path("large-upload.png");
+    let mut image = image::RgbImage::new(2600, 1400);
+    for (x, y, pixel) in image.enumerate_pixels_mut() {
+        *pixel = image::Rgb([(x % 256) as u8, (y % 256) as u8, 128]);
+    }
+    image.save(&path).expect("write large image");
+
+    let body = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+    let (port, requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&path.to_string_lossy(), "--json", "--ask", "What is this?"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "test-vl"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    let vision = &json["vision"];
+    assert_eq!(vision["downscaled"], true, "{vision}");
+    let sent_width = vision["sent_width"].as_u64().expect("sent_width") as u32;
+    let sent_height = vision["sent_height"].as_u64().expect("sent_height") as u32;
+    assert!(sent_width <= 1280 && sent_height <= 1280, "{vision}");
+    assert!(vision["request_bytes"].as_u64().unwrap() <= 6 * 1024 * 1024);
+    // The analysis itself still describes the original image.
+    assert_eq!(json["image"]["width"], 2600);
+
+    let request = requests
+        .recv_timeout(Duration::from_secs(10))
+        .expect("mock");
+    let request_body = request_body(&request);
+    let url = request_body["messages"][1]["content"][1]["image_url"]["url"]
+        .as_str()
+        .expect("image_url");
+    let encoded = url
+        .strip_prefix("data:image/png;base64,")
+        .expect("data uri");
+    let uploaded = omma::base64::decode(encoded, 32 * 1024 * 1024).expect("decode upload");
+    assert_eq!(png_dimensions(&uploaded), (sent_width, sent_height));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn the_upload_ceiling_is_configurable_and_smaller_images_are_sent_untouched() {
+    let body = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+    let (port, _requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("text.png"), "--json", "--ask", "Q"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "test-vl"),
+            ("OMMA_VISION_MAX_DIMENSION", "64"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    assert_eq!(json["vision"]["downscaled"], true);
+    assert!(json["vision"]["sent_width"].as_u64().unwrap() <= 64);
+    assert!(json["vision"]["sent_height"].as_u64().unwrap() <= 64);
+}
+
+#[test]
+fn a_small_image_is_uploaded_at_its_own_size() {
+    let body = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+    let (port, _requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("text.png"), "--json", "--ask", "Q"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "test-vl"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    assert_eq!(json["vision"]["downscaled"], false);
+    assert_eq!(json["vision"]["sent_width"], 600);
+    assert_eq!(json["vision"]["sent_height"], 140);
 }

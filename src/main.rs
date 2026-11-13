@@ -70,6 +70,7 @@ fn analyze(args: AnalyzeArgs) -> Result<i32> {
         ask: question,
         region: args.region.clone(),
         allowed_directories: config.mcp.allowed_directories.clone(),
+        declared_mime: None,
     };
 
     let report = analysis::run(&image, &config, &options)?;

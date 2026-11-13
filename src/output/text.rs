@@ -5,8 +5,8 @@ use std::fmt::Write;
 
 use crate::report::Report;
 
-/// Untrusted strings reach the terminal as text, never as terminal control: an
-/// escape sequence in a model answer or a file name must not drive the screen.
+/// Image-derived text reaches a terminal, so control characters are removed: a
+/// file name or a model answer must not be able to emit escape sequences.
 fn safe(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for character in text.chars() {

@@ -44,6 +44,9 @@ new major value.
 detectable), `analyzed_width`, `analyzed_height`.
 EXIF orientation is not applied and therefore not reported.
 
+`filename` is the path as given, `stdin` for `omma -`, and `inline` when the MCP
+caller sent `image_base64`.
+
 ## `region`
 
 `x`, `y`, `width`, `height`, `source_width`, `source_height`.
@@ -114,15 +117,22 @@ was disabled.
 ## `vision`
 
 `untrusted` (always `true`), `enabled`, `provider` (`"openai-compatible"`),
-`endpoint`, `model`, `question`, `description`, `duration_ms`.
-No API key is ever included.
+`endpoint`, `model`, `question`, `description`, `duration_ms`, and the upload facts:
+`sent_width`, `sent_height`, `downscaled`, `request_bytes`. No API key is ever
+included.
+
+`sent_width`/`sent_height` are what the model actually received after downscaling
+(`vision.max_image_dimension`, `vision.max_request_mb`); the rest of the report
+always describes the original image. `downscaled` says whether the upload was
+reduced, so a consumer knows not to blame the model for a detail it never saw.
 
 ## `warnings`
 
 Codes currently emitted: `ocr_unavailable`, `ocr_language_missing`,
 `ocr_language_unavailable`, `ocr_failed`, `ocr_timeout`, `ocr_prepare_failed`,
-`colors_no_opaque_samples`, `ocr_structure_unavailable`, `ocr_low_confidence`,
-`layout_no_text_regions`, `layout_low_confidence_blocks`, `vision_failed`.
+`colors_no_opaque_samples`, `image_mime_mismatch`, `ocr_structure_unavailable`,
+`ocr_low_confidence`, `layout_no_text_regions`, `layout_low_confidence_blocks`,
+`vision_failed`.
 Consumers should treat unknown codes as informational.
 
 When every sampled pixel is transparent the palette is empty and

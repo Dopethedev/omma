@@ -94,6 +94,16 @@ pub struct Vision {
     pub api_key: Option<String>,
     /// A non-loopback endpoint is a remote upload; it needs this explicit yes.
     pub allow_remote: bool,
+    /// Longest side of the image actually uploaded; larger images are downscaled.
+    pub max_image_dimension: u32,
+    /// Ceiling for the encoded PNG sent to the model.
+    pub max_request_mb: u64,
+}
+
+impl Vision {
+    pub fn max_request_bytes(&self) -> u64 {
+        self.max_request_mb.saturating_mul(1024 * 1024)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -162,6 +172,8 @@ impl Default for Vision {
             max_tokens: 400,
             api_key: None,
             allow_remote: false,
+            max_image_dimension: 1280,
+            max_request_mb: 6,
         }
     }
 }
@@ -303,6 +315,12 @@ impl Config {
         if let Some(raw) = env("OMMA_VISION_ALLOW_REMOTE") {
             self.vision.allow_remote = parse_bool(&raw, "OMMA_VISION_ALLOW_REMOTE")?;
         }
+        if let Some(raw) = env("OMMA_VISION_MAX_DIMENSION") {
+            self.vision.max_image_dimension = parse_env(&raw, "OMMA_VISION_MAX_DIMENSION")?;
+        }
+        if let Some(raw) = env("OMMA_VISION_MAX_REQUEST_MB") {
+            self.vision.max_request_mb = parse_env(&raw, "OMMA_VISION_MAX_REQUEST_MB")?;
+        }
         if let Some(raw) = env("OMMA_LOG_LEVEL") {
             self.logging.level = raw;
         }
@@ -358,6 +376,14 @@ impl Config {
         }
         if self.vision.timeout_seconds == 0 {
             return Err(fail("vision.timeout_seconds must be greater than 0".into()));
+        }
+        if self.vision.max_image_dimension == 0 || self.vision.max_image_dimension > 16384 {
+            return Err(fail(
+                "vision.max_image_dimension must be between 1 and 16384".into(),
+            ));
+        }
+        if self.vision.max_request_mb == 0 {
+            return Err(fail("vision.max_request_mb must be greater than 0".into()));
         }
         if self.vision.enabled && self.vision.model.trim().is_empty() {
             return Err(fail(
