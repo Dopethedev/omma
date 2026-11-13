@@ -124,8 +124,14 @@ omma IMAGE            # human report
 |---|---|---|
 | `test` | ubuntu-latest | fmt, clippy, full suite, release build, binary smoke tests, MCP exchange |
 | `test` | macos-latest (arm64) | same |
+| `test` | macos-15-intel (x86_64) | same |
 | `test` | windows-latest | same |
 | `msrv` | ubuntu-latest | build + compile all tests on the declared minimum (1.89.0) |
+
+Two macOS architectures because the free-plan arm64 pool frequently evicts queued
+jobs and `macos-13` is retired (macOS 14 images went away 2026-11-02), so an Intel
+runner is the reliable second path. A job that never gets a runner must be rerun:
+`gh run rerun <run> --job <job-id>`.
 
 - [x] Tesseract installed per platform (apt / brew / choco) and reported in the log.
 - [x] Formatting, Clippy (`-D warnings`) and the full suite pass on all three.

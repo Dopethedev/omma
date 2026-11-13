@@ -47,6 +47,7 @@ artifact carries its own `.sha256`:
 |---|---|
 | `omma-0.1.0-linux-x86_64` | Ubuntu, glibc ≥ 2.39 |
 | `omma-0.1.0-macos-aarch64` | macOS on Apple Silicon |
+| `omma-0.1.0-macos-x86_64` | macOS on Intel |
 | `omma-0.1.0-windows-x86_64.exe` | Windows x86_64 |
 
 ```sh
@@ -87,12 +88,19 @@ jobs plus an MSRV job):
 
 | Platform | Runner | Tesseract | Tests |
 |---|---|---|---|
-| Ubuntu x86_64 | `ubuntu-latest` | 5.5.x (apt) | 68 passed |
+| Ubuntu x86_64 | `ubuntu-latest` | 5.5.0 (apt) | 68 passed |
 | macOS arm64 | `macos-latest` | 5.5.4 (brew) | 68 passed |
+| macOS x86_64 | `macos-15-intel` | 5.5.4 (brew) | 68 passed |
 | Windows x86_64 | `windows-latest` | 5.5.x (choco) | 68 passed |
+| Rust 1.89.0 | `ubuntu-latest` | 5.5.x (apt) | build + all test targets compile |
 
-Those are the platforms exercised. Other targets — Linux aarch64, macOS x86_64,
-Windows ARM, the BSDs — are untested and unclaimed, though nothing in the code is
+All jobs also run formatting, Clippy at `-D warnings`, a release build, and smoke
+tests of that release binary. The same four platform jobs are green together on a
+single commit; earlier attempts lost macOS jobs to runner-queue eviction, which is
+why the workflow keeps both an arm64 and an Intel macOS runner.
+
+Those are the platforms exercised. Other targets — Linux aarch64, Windows ARM,
+and the BSDs — are untested and unclaimed, though nothing in the code is
 platform-specific beyond the Tesseract lookup and the config directory fallback.
 
 - Rust 1.89 or newer to build (verified in CI); edition 2024. The floor comes
