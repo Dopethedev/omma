@@ -60,6 +60,8 @@ Read from stdin passes the same size, format and decode limits as a file.
   map stays readable; JSON carries every cell.
 - **JSON**: `--json` or `--format json`; `--pretty` to indent. In JSON mode
   stdout contains one JSON value and nothing else. Logs and errors go to stderr.
+  `--json` together with `--format text` is refused (exit 2) rather than silently
+  choosing one.
 - **File**: `--output FILE` writes the rendered result there and leaves stdout
   empty.
 

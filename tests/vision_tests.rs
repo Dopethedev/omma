@@ -291,3 +291,92 @@ fn base64_encoding_matches_the_standard_alphabet() {
     assert_eq!(omma::vision::encode_base64(b"foo"), "Zm9v");
     assert_eq!(omma::vision::encode_base64(b"foobar"), "Zm9vYmFy");
 }
+
+// --- regression: loopback detection -------------------------------------
+
+#[test]
+fn a_hostname_that_only_looks_like_loopback_is_refused() {
+    for endpoint in [
+        "http://127.0.0.1.attacker.example:11434/v1/chat/completions",
+        "http://127.example.com/v1/chat/completions",
+        "http://localhost.attacker.example/v1/chat/completions",
+    ] {
+        let config = write_config(&format!(
+            "[vision]\nenabled = true\nendpoint = \"{endpoint}\"\nmodel = \"m\"\n"
+        ));
+        let output = run(&[
+            &fixture("text.png"),
+            "--json",
+            "--vision",
+            "--config",
+            &config,
+        ]);
+        assert_eq!(
+            code(&output),
+            2,
+            "{endpoint} must be refused before any request: {}",
+            stderr_text(&output)
+        );
+        assert!(
+            stderr_text(&output).contains("loopback"),
+            "{endpoint}: {}",
+            stderr_text(&output)
+        );
+        let _ = std::fs::remove_file(config);
+    }
+}
+
+#[test]
+fn loopback_means_a_loopback_literal_and_nothing_else() {
+    for allowed in [
+        "localhost",
+        "LOCALHOST",
+        "localhost:11434",
+        "127.0.0.1",
+        "127.0.0.1:8080",
+        "127.1.2.3",
+        "[::1]:80",
+    ] {
+        assert!(
+            omma::vision::is_loopback(allowed),
+            "{allowed} should be loopback"
+        );
+    }
+    for refused in [
+        "127.0.0.1.attacker.example",
+        "127.example.com",
+        "127.0.0.1x",
+        "127",
+        "0.0.0.0",
+        "10.1.2.3",
+        "example.com",
+        "localhost.attacker.example",
+        "[fe80::1]",
+    ] {
+        assert!(
+            !omma::vision::is_loopback(refused),
+            "{refused} must not be loopback"
+        );
+    }
+}
+
+#[test]
+fn a_control_character_in_the_answer_never_reaches_the_terminal() {
+    let body = r#"{"choices":[{"message":{"content":"before\u001b[2Jafter"}}]}"#;
+    let (port, _requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("text.png"), "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "test-vl"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("before") && stdout.contains("after"));
+    assert!(
+        !stdout.contains('\u{1b}'),
+        "an escape sequence from the model reached the terminal"
+    );
+}

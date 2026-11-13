@@ -270,3 +270,37 @@ fn non_image_bytes_are_rejected() {
     assert!(stderr_text(&output).contains("unsupported image format"));
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn json_and_format_text_contradict_each_other() {
+    // `--json` is documented as an alias for `--format json`; silently emitting a
+    // human report to a caller that asked for JSON is a trap.
+    let output = run(&[&fixture("solid.png"), "--json", "--format", "text"]);
+    assert_eq!(code(&output), 2, "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).contains("contradict"),
+        "{}",
+        stderr_text(&output)
+    );
+    assert!(stdout_text(&output).is_empty());
+}
+
+#[test]
+fn a_frightening_filename_is_printed_safely() {
+    if cfg!(windows) {
+        // Windows forbids control characters in file names, so the vector is
+        // Linux/macOS only.
+        eprintln!("skipping: Windows rejects control characters in file names");
+        return;
+    }
+    let tricky = temp_path("escape-\u{1b}[2J-name.png");
+    std::fs::copy(fixture("text.png"), &tricky).expect("copy fixture");
+    let name = tricky.to_string_lossy().into_owned();
+    let output = run(&[&name, "--no-ocr"]);
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    assert!(
+        !stdout_text(&output).contains('\u{1b}'),
+        "an escape sequence in the file name reached the terminal"
+    );
+    let _ = std::fs::remove_file(&tricky);
+}

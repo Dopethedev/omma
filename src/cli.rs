@@ -145,15 +145,23 @@ pub struct Selection {
 
 impl AnalyzeArgs {
     pub fn format(&self, default: OutputFormat) -> Result<OutputFormat> {
-        if let Some(raw) = &self.format {
-            return OutputFormat::parse(raw).ok_or_else(|| {
+        let named = match &self.format {
+            Some(raw) => Some(OutputFormat::parse(raw).ok_or_else(|| {
                 Error::Usage(format!("unknown --format {raw:?}; expected text or json"))
-            });
-        }
+            })?),
+            None => None,
+        };
         if self.json {
+            // `--json` is documented as an alias; contradicting it silently
+            // printed a human report to a caller that asked for JSON.
+            if named == Some(OutputFormat::Text) {
+                return Err(Error::Usage(
+                    "--json and --format text contradict each other".to_string(),
+                ));
+            }
             return Ok(OutputFormat::Json);
         }
-        Ok(default)
+        Ok(named.unwrap_or(default))
     }
 
     pub fn selection(&self, config: &Config) -> Result<Selection> {

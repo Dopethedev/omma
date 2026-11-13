@@ -5,6 +5,20 @@ use std::fmt::Write;
 
 use crate::report::Report;
 
+/// Untrusted strings reach the terminal as text, never as terminal control: an
+/// escape sequence in a model answer or a file name must not drive the screen.
+fn safe(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '\n' | '\t' => out.push(character),
+            c if c.is_control() => out.push('\u{FFFD}'),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 pub fn render(report: &Report) -> String {
     let mut out = String::new();
     let image = &report.image;
@@ -12,7 +26,7 @@ pub fn render(report: &Report) -> String {
     let _ = writeln!(
         out,
         "== {}  ({} {}x{}, {}, aspect {:.2})",
-        image.filename,
+        safe(&image.filename),
         image.format,
         image.width,
         image.height,
@@ -61,7 +75,7 @@ pub fn render(report: &Report) -> String {
             if ocr.text.is_empty() {
                 let _ = writeln!(out, "(no text found)");
             } else {
-                let _ = writeln!(out, "{}", ocr.text);
+                let _ = writeln!(out, "{}", safe(&ocr.text));
             }
         }
         None => {
@@ -138,7 +152,7 @@ pub fn render(report: &Report) -> String {
                 region.bbox.y,
                 region.bbox.width,
                 region.bbox.height,
-                region.content
+                safe(&region.content)
             );
         }
     }
@@ -149,8 +163,8 @@ pub fn render(report: &Report) -> String {
             "\n== asked ({}, {} [untrusted])",
             vision.provider, vision.model
         );
-        let _ = writeln!(out, "Q: {}", vision.question);
-        let _ = writeln!(out, "A: {}", vision.description);
+        let _ = writeln!(out, "Q: {}", safe(&vision.question));
+        let _ = writeln!(out, "A: {}", safe(&vision.description));
     }
 
     if !report.warnings.is_empty() {

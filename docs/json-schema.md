@@ -121,9 +121,13 @@ No API key is ever included.
 
 Codes currently emitted: `ocr_unavailable`, `ocr_language_missing`,
 `ocr_language_unavailable`, `ocr_failed`, `ocr_timeout`, `ocr_prepare_failed`,
-`ocr_structure_unavailable`, `ocr_low_confidence`, `layout_no_text_regions`,
-`layout_low_confidence_blocks`, `vision_failed`.
+`colors_no_opaque_samples`, `ocr_structure_unavailable`, `ocr_low_confidence`,
+`layout_no_text_regions`, `layout_low_confidence_blocks`, `vision_failed`.
 Consumers should treat unknown codes as informational.
+
+When every sampled pixel is transparent the palette is empty and
+`average_rgb`/`brightness`/`saturation` are placeholders (`[0,0,0]`, `0.0`), not a
+black image: `colors_no_opaque_samples` says so and `colors.sample.samples` is 0.
 
 ## `processing`
 

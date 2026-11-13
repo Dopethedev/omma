@@ -276,3 +276,16 @@ fn stdout_carries_protocol_frames_only() {
         assert_eq!(value["jsonrpc"], "2.0");
     }
 }
+
+#[test]
+fn stdin_is_not_an_image_source_over_mcp() {
+    let mut session = Session::start(&[]);
+    session.initialize();
+    // Reading stdin here would consume protocol frames and never answer.
+    let response = session.call(2, "analyze_image", json!({ "image_path": "-" }));
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(text.contains("stdin"), "{text}");
+}

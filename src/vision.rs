@@ -68,7 +68,15 @@ pub fn is_loopback(authority: &str) -> bool {
         authority.split(':').next().unwrap_or("")
     };
     let host = host.to_ascii_lowercase();
-    host == "localhost" || host == "::1" || host.starts_with("127.")
+    if host == "localhost" || host == "::1" {
+        return true;
+    }
+    // A literal address in 127/8, nothing else. A prefix test accepted
+    // "127.0.0.1.attacker.example", which resolves to a real remote host: the
+    // image left the machine with allow_remote = false.
+    host.parse::<std::net::Ipv4Addr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
 }
 
 /// Ask the configured endpoint one question about one image.

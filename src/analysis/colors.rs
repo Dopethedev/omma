@@ -11,7 +11,7 @@ use image::DynamicImage;
 use image::imageops::FilterType;
 
 use crate::config::Config;
-use crate::report::{Colors, Grid, Sample, Swatch};
+use crate::report::{Colors, Grid, Sample, Swatch, Warning};
 
 /// The palette always reads this frame, whatever the grid dimensions are.
 pub const PALETTE_SAMPLE_W: u32 = 64;
@@ -73,6 +73,8 @@ pub fn hex(rgb: [u8; 3]) -> String {
 pub struct ColorsResult {
     pub colors: Colors,
     pub grid: Grid,
+    /// Set when nothing was opaque: the statistics are placeholders, not black.
+    pub warning: Option<Warning>,
 }
 
 pub fn analyze(image: &DynamicImage, config: &Config) -> ColorsResult {
@@ -110,6 +112,12 @@ pub fn analyze(image: &DynamicImage, config: &Config) -> ColorsResult {
 
     let (average_rgb, brightness, saturation) = statistics(&opaque);
 
+    let warning = (total == 0).then(|| Warning {
+        code: "colors_no_opaque_samples",
+        message: "every sampled pixel was transparent, so the palette is empty and average_rgb, brightness and saturation are placeholders rather than a black image"
+            .to_string(),
+    });
+
     let colors = Colors {
         dominant,
         average_rgb,
@@ -143,7 +151,11 @@ pub fn analyze(image: &DynamicImage, config: &Config) -> ColorsResult {
         cells: rows,
     };
 
-    ColorsResult { colors, grid }
+    ColorsResult {
+        colors,
+        grid,
+        warning,
+    }
 }
 
 fn statistics(sampled: &[[u8; 3]]) -> ([u8; 3], f64, f64) {

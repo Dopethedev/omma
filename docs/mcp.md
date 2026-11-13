@@ -39,7 +39,7 @@ Input schema (`additionalProperties: false`, `image_path` required):
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `image_path` | string | — | Local image file to analyze |
+| `image_path` | string | — | Local image file to analyze; stdin (`-`) is refused |
 | `ocr` | boolean | true | Run OCR |
 | `colors` | boolean | true | Palette + spatial grid |
 | `layout` | boolean | true | Text regions from OCR boxes |

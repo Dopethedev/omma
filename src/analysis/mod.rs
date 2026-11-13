@@ -83,6 +83,9 @@ pub fn run(source: &str, config: &Config, options: &Options) -> Result<Report> {
     let colors_out = if options.colors {
         let started = Instant::now();
         let result = colors::analyze(&decoded.image, config);
+        if let Some(warning) = &result.warning {
+            warnings.push(warning.clone());
+        }
         stages.colors = started.elapsed().as_millis() as u64;
         Some(result)
     } else {

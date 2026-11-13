@@ -146,3 +146,35 @@ fn a_directory_is_an_input_error_not_a_usage_error() {
     assert!(stderr_text(&output).contains("not a regular file"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_fully_transparent_image_reports_no_palette_rather_than_black() {
+    let path = temp_path("transparent.png");
+    let pixels = image::RgbaImage::from_pixel(40, 30, image::Rgba([200, 10, 10, 0]));
+    pixels.save(&path).expect("write transparent image");
+    let path_text = path.to_string_lossy().into_owned();
+    let json = analyze(&path_text, &[]);
+
+    assert_eq!(json["colors"]["sample"]["samples"], 0);
+    assert_eq!(json["colors"]["sample"]["transparent_samples"], 2304);
+    assert!(json["colors"]["dominant"].as_array().unwrap().is_empty());
+    let cells = json["grid"]["cells"].as_array().unwrap();
+    let flat: Vec<&serde_json::Value> = cells
+        .iter()
+        .filter_map(|row| row.as_array())
+        .flatten()
+        .collect();
+    assert!(!flat.is_empty());
+    assert!(flat.iter().all(|cell| cell.is_null()));
+    let codes: Vec<&str> = json["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|warning| warning["code"].as_str())
+        .collect();
+    assert!(
+        codes.contains(&"colors_no_opaque_samples"),
+        "a zero-sample palette must say so: {codes:?}"
+    );
+    let _ = std::fs::remove_file(&path);
+}

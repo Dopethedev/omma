@@ -194,6 +194,13 @@ impl OmmaServer {
         };
 
         let path = params.image_path;
+        // stdin is the protocol channel here: reading it would swallow client
+        // frames and block the request forever.
+        if path.trim().is_empty() || path == "-" {
+            return Ok(tool_error(
+                "image_path must be a file path; stdin is not available over MCP",
+            ));
+        }
         let joined =
             tokio::task::spawn_blocking(move || analysis::run(&path, &config, &options)).await;
 

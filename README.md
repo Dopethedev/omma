@@ -281,6 +281,11 @@ Stated plainly, because they matter more than the feature list:
   protocol-level stub and a mock server, not a real model.
 - **OCR languages** beyond `eng` require Tesseract language packs; the installed
   set is reported by `omma doctor` and missing ones produce warnings.
+- **Colour sampling resizes straight (non-premultiplied) alpha.** A hard edge
+  between an opaque colour and fully transparent pixels can darken the few grid
+  cells that straddle it, because the transparent side's RGB is averaged in. Fixing
+  it would change every palette and grid value, so it is documented rather than
+  silently changed.
 - Not implemented: PDF pages, video frames, batch/multi-image runs, QR/barcodes,
   table or chart detection, image comparison, extra OCR or vision providers.
 - **Platforms**: Ubuntu x86_64, macOS arm64 and Windows x86_64 are tested
@@ -298,6 +303,8 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
 - Tesseract is spawned with explicit arguments — no shell — with a timeout, its
   output captured, and the image fed over stdin so no temporary file is written.
 - OCR text, image contents and API keys are never logged.
+- Text mode strips control characters from image-derived strings (file names, OCR
+  text, model answers), so they cannot drive the terminal with escape sequences.
 - MCP paths are canonicalized and can be restricted to allowed directories;
   symlinks are resolved before the check, so a link cannot escape a root.
 
