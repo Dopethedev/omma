@@ -1,6 +1,7 @@
 // Drive the release binary over MCP/stdio and assert the whole exchange.
 // Every byte on stdout must be a protocol frame.
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const bin = process.env.OMMA_BIN ?? "target/release/omma";
 const timeoutMs = 60_000;
@@ -38,6 +39,18 @@ const requests = [
     id: 5,
     method: "tools/call",
     params: { name: "analyze_image", arguments: { image_path: "/nope/nope.png" } },
+  },
+  {
+    // The same fixture as bytes: the path is never touched.
+    jsonrpc: "2.0",
+    id: 6,
+    method: "tools/call",
+    params: {
+      name: "analyze_image",
+      arguments: {
+        image_base64: readFileSync("tests/fixtures/text.png").toString("base64"),
+      },
+    },
   },
 ];
 
@@ -77,7 +90,12 @@ const finish = () => {
     if (!names.includes(want)) fail(`tool ${want} missing (got ${names.join(",")})`);
   }
   const analyze = tools.result.tools.find((t) => t.name === "analyze_image");
-  if (analyze.inputSchema?.required?.[0] !== "image_path") fail("input schema");
+  const schema = analyze.inputSchema ?? {};
+  if ((schema.required ?? []).length !== 0) fail("input schema: required must be empty");
+  const branches = (schema.oneOf ?? []).map((b) => b?.required?.[0]).sort();
+  if (branches.join(",") !== "image_base64,image_path") fail(`input schema oneOf: ${branches}`);
+  if (!schema.properties?.image_base64) fail("input schema: image_base64 missing");
+  if (!schema.properties?.mime_type) fail("input schema: mime_type missing");
   if (analyze.annotations?.readOnlyHint !== true) fail("readOnlyHint");
 
   const caps = byId(3);
@@ -98,10 +116,17 @@ const finish = () => {
   const missing = byId(5);
   if (missing?.result?.isError !== true) fail("a missing file must be a tool error");
 
+  const inline = byId(6);
+  if (inline?.result?.isError === true) fail("inline image returned an error");
+  const inlineValue = JSON.parse(inline.result.content[0].text);
+  if (inlineValue.image?.filename !== "inline") fail(`inline filename: ${inlineValue.image?.filename}`);
+  if (inlineValue.image?.width !== 600) fail("inline image width");
+  if (!/omma reads this line/i.test(inlineValue.ocr?.text ?? "")) fail("inline ocr text");
+
   child.kill();
   console.log(
     `mcp ok: ${messages.length} frames, tools=${names.join(",")}, ` +
-      `ocr=${value.ocr.confidence}, regions=${value.layout.regions.length}`,
+      `ocr=${value.ocr.confidence}, regions=${value.layout.regions.length}, inline=${inlineValue.image.width}px`,
   );
   process.exit(0);
 };
@@ -123,7 +148,7 @@ child.stdout.on("data", (chunk) => {
     messages.push(message);
     // rmcp dispatches requests concurrently, so a slow analyze may answer after
     // a fast error. Wait until every expected id has arrived.
-    if ([1, 2, 3, 4, 5].every((id) => messages.some((m) => m.id === id))) finish();
+    if ([1, 2, 3, 4, 5, 6].every((id) => messages.some((m) => m.id === id))) finish();
   }
 });
 
