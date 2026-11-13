@@ -15,6 +15,9 @@ pub struct Report {
     pub tool: Tool,
     pub image: ImageMeta,
     pub region: Option<RegionMeta>,
+    /// Rectangles painted out before analysis; absent when none were requested.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub redactions: Vec<RegionMeta>,
     pub ocr: Option<Ocr>,
     pub colors: Option<Colors>,
     pub grid: Option<Grid>,

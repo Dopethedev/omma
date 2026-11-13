@@ -16,7 +16,7 @@ new major value.
 4. **Coordinates are pixel coordinates of the analyzed frame.** When `region` is
    non-null, boxes are relative to the crop; `image.width/height` stay the source
    dimensions and `region` records the offset. `normalized` is in 0..1 of the
-   analyzed frame.
+   analyzed frame. `redactions` are reported in the same frame, after the crop.
 5. **Determinism.** Identical input and configuration produce identical output
    except for timings.
 
@@ -28,6 +28,7 @@ new major value.
 | `tool` | object | `{ "name": "omma", "version": "x.y.z" }` |
 | `image` | object | measured image metadata |
 | `region` | object \| null | crop applied, when `--region` was used |
+| `redactions` | array \| absent | rectangles painted out, each with `x`, `y`, `width`, `height` |
 | `ocr` | object \| null | text and structure, `null` when unavailable/disabled |
 | `colors` | object \| null | palette and statistics |
 | `grid` | object \| null | the spatial colour grid |

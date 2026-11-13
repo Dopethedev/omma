@@ -417,6 +417,10 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
 - Tesseract is spawned with explicit arguments — no shell — with a timeout, its
   output captured, and the image fed over stdin so no temporary file is written.
 - OCR text, image contents and API keys are never logged.
+- `--redact X,Y,W,H` paints rectangles out of the pixels before anything reads
+  them, so the covered area is missing from OCR, colours, layout *and* the copy
+  sent to a vision model. It is the only way to keep details out of a hosted
+  model today: cropping changes what the model sees, redaction changes both.
 - Text mode strips control characters from image-derived strings (file names, OCR
   text, model answers), so they cannot drive the terminal with escape sequences.
 - MCP paths are canonicalized and can be restricted to allowed directories;

@@ -23,7 +23,7 @@ fn main() -> ExitCode {
 
 fn dispatch(cli: Cli) -> Result<i32> {
     match cli.command {
-        Some(Command::Analyze(args)) => analyze(args),
+        Some(Command::Analyze(args)) => analyze(*args),
         Some(Command::Doctor(args)) => doctor(args),
         Some(Command::Mcp { action }) => match action {
             McpAction::Serve(args) => serve(args),
@@ -69,6 +69,7 @@ fn analyze(args: AnalyzeArgs) -> Result<i32> {
         layout: selection.layout,
         ask: question,
         region: args.region.clone(),
+        redact: args.redact.clone(),
         allowed_directories: config.mcp.allowed_directories.clone(),
         declared_mime: None,
     };

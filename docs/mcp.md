@@ -51,6 +51,7 @@ Input schema (`additionalProperties: false`; supply exactly one of `image_path` 
 | `language` | string | configured | OCR languages, `eng` or `eng+deu` |
 | `max_colors` | integer 1–64 | configured | Dominant colours |
 | `region` | string | — | `X,Y,W,H` crop in source pixels |
+| `redact` | array of strings | — | `X,Y,W,H` boxes painted out before analysis |
 
 Returns the full report described in [json-schema.md](json-schema.md), both as
 text content and as `structuredContent`.

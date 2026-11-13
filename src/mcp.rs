@@ -41,7 +41,8 @@ const ANALYZE_SCHEMA: &str = r#"{
     "ask": { "type": "string", "description": "Question for the vision model; implies vision." },
     "language": { "type": "string", "description": "OCR language(s), e.g. \"eng\" or \"eng+deu\"." },
     "max_colors": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Number of dominant colours." },
-    "region": { "type": "string", "description": "Crop to analyze: X,Y,W,H in source pixels." }
+    "region": { "type": "string", "description": "Crop to analyze: X,Y,W,H in source pixels." },
+    "redact": { "type": "array", "items": { "type": "string" }, "description": "Hide these rectangles before analysis: X,Y,W,H each, in source pixels (or the crop's pixels when region is set). Redacted areas are absent from OCR, colours, layout and the vision upload." }
   },
   "required": [],
   "oneOf": [{ "required": ["image_path"] }, { "required": ["image_base64"] }],
@@ -100,6 +101,8 @@ struct AnalyzeParams {
     max_colors: Option<usize>,
     #[serde(default)]
     region: Option<String>,
+    #[serde(default)]
+    redact: Vec<String>,
 }
 
 impl ServerHandler for OmmaServer {
@@ -204,6 +207,7 @@ impl OmmaServer {
             layout: params.layout.unwrap_or(true),
             ask,
             region: params.region.clone(),
+            redact: params.redact.clone(),
             allowed_directories: config.mcp.allowed_directories.clone(),
             declared_mime: params.mime_type.clone(),
         };

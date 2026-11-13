@@ -224,8 +224,8 @@ fn gif_is_animated(bytes: &[u8]) -> Option<bool> {
     Some(frames > 1)
 }
 
-/// Parse `X,Y,W,H` and crop, validating against the decoded image.
-pub fn crop(image: DynamicImage, spec: &str) -> Result<(DynamicImage, RegionMeta)> {
+/// Parse `X,Y,W,H` into four numbers, rejecting anything malformed.
+pub fn parse_box(spec: &str) -> Result<(u32, u32, u32, u32)> {
     let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
     if parts.len() != 4 {
         return Err(Error::Region {
@@ -241,6 +241,60 @@ pub fn crop(image: DynamicImage, spec: &str) -> Result<(DynamicImage, RegionMeta
         })?;
     }
     let [x, y, width, height] = values;
+    Ok((x, y, width, height))
+}
+
+/// Paint opaque grey over `X,Y,W,H` rectangles before anything reads pixels.
+///
+/// This runs on the decoded image, so a covered area is absent from OCR, the
+/// colour grid, layout regions and the copy sent to a vision model alike. That
+/// is the point: cropping only changed what the model saw while the report kept
+/// the text. Coordinates address the image as it stands at this moment — source
+/// pixels, or the crop's pixels when a region was requested first — and a box
+/// that runs past the edge is clamped rather than refused.
+pub fn redact(image: &mut DynamicImage, specs: &[String]) -> Result<Vec<RegionMeta>> {
+    let mut applied = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let (x, y, width, height) = parse_box(spec)?;
+        let (source_width, source_height) = (image.width(), image.height());
+        if width == 0 || height == 0 {
+            return Err(Error::Region {
+                region: spec.clone(),
+                reason: "width and height must be greater than 0".to_string(),
+            });
+        }
+        if x >= source_width || y >= source_height {
+            return Err(Error::Region {
+                region: spec.clone(),
+                reason: format!(
+                    "origin ({x},{y}) lies outside the {source_width}x{source_height} image"
+                ),
+            });
+        }
+        let width = width.min(source_width - x);
+        let height = height.min(source_height - y);
+        let fill = image::RgbaImage::from_pixel(width, height, image::Rgba([128, 128, 128, 255]));
+        image::imageops::replace(
+            image,
+            &DynamicImage::ImageRgba8(fill),
+            i64::from(x),
+            i64::from(y),
+        );
+        applied.push(RegionMeta {
+            x,
+            y,
+            width,
+            height,
+            source_width,
+            source_height,
+        });
+    }
+    Ok(applied)
+}
+
+/// Parse `X,Y,W,H` and crop, validating against the decoded image.
+pub fn crop(image: DynamicImage, spec: &str) -> Result<(DynamicImage, RegionMeta)> {
+    let (x, y, width, height) = parse_box(spec)?;
     let (source_width, source_height) = (image.width(), image.height());
     if width == 0 || height == 0 {
         return Err(Error::Region {

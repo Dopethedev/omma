@@ -19,6 +19,8 @@ pub struct Options {
     pub layout: bool,
     pub ask: Option<String>,
     pub region: Option<String>,
+    /// Rectangles to paint out before any subsystem reads the pixels.
+    pub redact: Vec<String>,
     /// Directories a path must resolve inside; empty means no restriction.
     pub allowed_directories: Vec<std::path::PathBuf>,
     /// Media type declared by an inline caller; the bytes still decide the format.
@@ -33,6 +35,7 @@ impl Default for Options {
             layout: true,
             ask: None,
             region: None,
+            redact: Vec::new(),
             allowed_directories: Vec::new(),
             declared_mime: None,
         }
@@ -101,6 +104,11 @@ fn run_bytes(
         decoded.image = image;
         decoded.region = Some(region);
     }
+    let redactions = if options.redact.is_empty() {
+        Vec::new()
+    } else {
+        input::redact(&mut decoded.image, &options.redact)?
+    };
     let decode_ms = decode_started.elapsed().as_millis() as u64;
 
     let mut stages = Stages {
@@ -205,6 +213,7 @@ fn run_bytes(
         },
         image: image_meta,
         region: decoded.region.clone(),
+        redactions,
         ocr: ocr_out,
         colors: colors_out,
         grid: grid_out,

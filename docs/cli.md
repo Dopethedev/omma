@@ -95,6 +95,7 @@ answer.
 | `--json`, `--format json`, `--pretty` | JSON output, optionally indented |
 | `--output FILE` | Write the result to a file; stdout stays empty |
 | `--region X,Y,W,H` | Analyze one crop, in source pixels |
+| `--redact X,Y,W,H` | Paint a rectangle out before OCR, colours, layout and any upload; repeatable |
 | `--ask "…"` / `--vision` | Ask the configured vision model / ask the default question |
 | `--model NAME` | Vision model for this run |
 | `--max-colors N` | Dominant colours to report (1–64) |

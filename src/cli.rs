@@ -37,7 +37,10 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Analyze an image (same as passing an image directly).
-    Analyze(AnalyzeArgs),
+    ///
+    /// Boxed: the analyse arguments grew past 200 bytes, and the enum is matched
+    /// on every run while the extra indirection costs nothing.
+    Analyze(Box<AnalyzeArgs>),
     /// Report versions, backends, configuration and limits.
     Doctor(DoctorArgs),
     /// Model Context Protocol server.
@@ -88,6 +91,13 @@ pub struct AnalyzeArgs {
     /// Analyze only this crop: X,Y,W,H in source-image pixels.
     #[arg(long, value_name = "X,Y,W,H")]
     pub region: Option<String>,
+
+    /// Hide these rectangles: X,Y,W,H, repeatable. Redaction happens before OCR,
+    /// colours, layout and any upload, so the area is absent from the report and
+    /// from the copy a vision model sees. Coordinates are relative to the crop
+    /// when --region is also given.
+    #[arg(long, value_name = "X,Y,W,H", action = clap::ArgAction::Append)]
+    pub redact: Vec<String>,
 
     /// Ask the configured vision model one question about the image.
     #[arg(long, value_name = "QUESTION")]
