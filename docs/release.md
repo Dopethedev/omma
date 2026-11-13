@@ -1,7 +1,7 @@
 # Release checklist
 
 What has to be true before a version goes out. Every line is a command or a check
-that was actually run for 0.1.0, not an aspiration.
+that was actually run for 0.2.0, not an aspiration.
 
 ## 1. Engineering gate
 
@@ -14,7 +14,7 @@ cargo build --release
 
 - [x] Formatting clean.
 - [x] Clippy clean at `-D warnings` for all targets and features.
-- [x] Tests pass: 68 tests (0 failed) with Tesseract installed; OCR tests skip with
+- [x] Tests pass: 90 tests (0 failed) with Tesseract installed; OCR tests skip with
       a printed note when it is absent.
 - [x] Release profile builds (thin LTO, one codegen unit, stripped).
 
@@ -110,7 +110,7 @@ omma IMAGE            # human report
 
 - [x] `LICENSE-MIT` and `LICENSE-APACHE` present; `Cargo.toml` declares
       `MIT OR Apache-2.0`.
-- [x] `version` is `0.1.0` in `Cargo.toml` (single source; the binary, the JSON
+- [x] `version` is `0.2.0` in `Cargo.toml` (single source; the binary, the JSON
       `tool` object and the README example all read from it).
 - [x] `schema_version` bumped only for incompatible JSON changes.
 - [x] No secrets in the tree, in examples, or in logs.
@@ -155,7 +155,7 @@ runner is the reliable second path. A job that never gets a runner must be rerun
       homepage or repository" warning is gone.
 - [x] Clean-room build: the tree copied to a fresh directory, built with
       `--locked --offline` and a separate target directory, produced a
-      **bit-identical** binary (same SHA-256). `cargo test` there: 68 passed.
+      **bit-identical** binary (same SHA-256). `cargo test` there: 90 passed.
 - [x] Release artifacts are the CI-built binaries for the three tested platforms,
       each with a `.sha256` beside it; verify with `sha256sum -c` (or
       `shasum -a 256 -c` on macOS).
@@ -164,14 +164,14 @@ runner is the reliable second path. A job that never gets a runner must be rerun
 - [x] Linux artifact is dynamically linked and needs **glibc ≥ 2.39**; older
       distributions build from source (no musl toolchain is installed, and adding
       one was not justified for this release).
-- [x] Release notes: `docs/release-notes-0.1.0.md` — highlights, install per
+- [x] Release notes: `docs/release-notes-0.2.0.md` — highlights, install per
       platform, compatibility matrix, testing performed, known limitations.
 
 ## 12. Release
 
 ```sh
-git add -A && git commit -m "omma 0.1.0"   # needs the owner's word
-git tag -a v0.1.0 -m "omma 0.1.0"
+git add -A && git commit -m "omma 0.2.0"   # needs the owner's word
+git tag -a v0.2.0 -m "omma 0.2.0"
 cargo publish                              # if publishing to crates.io
 ```
 
