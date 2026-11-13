@@ -251,6 +251,8 @@ Two tools:
   both as text content and as structured content.
 - **`omma_capabilities`** — backends, formats, limits, schema version.
 
+If your agent supports skills or instructions files, [skills/omma/SKILL.md](skills/omma/SKILL.md) tells it when to reach for this server and how to read the answer. Nothing in it is required — it is the judgement an agent otherwise has to guess.
+
 Generic client configuration:
 
 ```json
