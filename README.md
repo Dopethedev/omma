@@ -226,9 +226,13 @@ see [docs/mcp.md](docs/mcp.md).
 
 Details, including the filesystem restrictions, are in [docs/mcp.md](docs/mcp.md).
 
-## Local vision
+## Vision: local or hosted
 
-OMMA never talks to a cloud model. Configure one local endpoint:
+OMMA speaks one OpenAI-compatible shape, so the same code drives a model on this
+machine or a hosted API. Nothing runs until you configure one, and nothing leaves
+the machine until you say so.
+
+**Local** — Ollama, llama.cpp's server, LM Studio, vLLM:
 
 ```toml
 # ~/.config/omma/config.toml
@@ -238,9 +242,41 @@ endpoint = "http://127.0.0.1:11434/v1/chat/completions"   # Ollama's OpenAI-comp
 model = "qwen2.5vl:7b"
 ```
 
-The same works with llama.cpp's server or LM Studio — anything that accepts an
-OpenAI `image_url` content part. A non-loopback endpoint is refused unless
-`vision.allow_remote = true` is set explicitly. Redirects are never followed.
+**Hosted** — GLM-5.3-Flash, exercised against W&B Inference:
+
+```toml
+[vision]
+enabled = true
+endpoint = "https://api.inference.wandb.ai/v1/chat/completions"
+model = "zai-org/GLM-5.3-Flash"
+allow_remote = true             # the explicit yes to sending an image off-machine
+api_key_env = "WANDB_API_KEY"   # the key lives in the environment, not in this file
+max_tokens = 2500               # reasoning models think before they answer
+```
+
+```sh
+export WANDB_API_KEY="<your-key>"   # in your shell, or in ~/.config/secrets.env
+omma screenshot.png --ask "Describe this screen and what each control does"
+```
+
+Z.AI serves the same model directly (`https://api.z.ai/api/paas/v4/chat/completions`,
+model `glm-5.3-flash`); only the endpoint, model id and variable name change.
+
+`api_key_env` names an environment variable; the secret never has to be written
+into a config file, a command line or a git checkout. `api_key = "..."` still
+works for a value you keep in a 0600 file, and `OMMA_VISION_API_KEY` supplies one
+directly. The key is sent as a bearer token and appears in no report, log line,
+doctor output or error message; `omma doctor` shows only where it came from.
+
+Rules that hold in both modes:
+
+- A non-loopback endpoint is refused unless `vision.allow_remote = true`.
+- A remote endpoint must be `https://`; a loopback server may use plain HTTP.
+- Redirects are never followed, and URLs with embedded credentials are refused.
+- There is no silent fallback: if the configured provider fails, the report keeps
+  OCR, colours, grid and layout, adds a warning naming the failure class
+  (`vision_unauthorized`, `vision_rate_limited`, `vision_timeout`,
+  `vision_failed`), and exits 3 because the requested backend produced nothing.
 
 With a model configured, one call returns everything: description, objects and
 their positions, OCR text, palette, grid and layout, each marked untrusted where
@@ -255,7 +291,8 @@ omma ui.png    --vision                                   # default question
 Large images are downscaled before upload (`vision.max_image_dimension`, 1280 by
 default; `vision.max_request_mb`, 6 MiB) — the analysis still describes the
 full-size image, and `vision.sent_width`/`sent_height` report what the model
-actually saw. Setup, hardware guidance and honest limits: [docs/vision.md](docs/vision.md).
+actually saw. Setup, model choices, hardware guidance and honest limits of what
+has been verified: [docs/vision.md](docs/vision.md).
 
 ## Configuration
 

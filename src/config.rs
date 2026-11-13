@@ -92,6 +92,12 @@ pub struct Vision {
     pub timeout_seconds: u64,
     pub max_tokens: u32,
     pub api_key: Option<String>,
+    /// Name of an environment variable holding the key. The secret itself never
+    /// lives in the config file, so a shared or committed config leaks nothing.
+    pub api_key_env: Option<String>,
+    /// Provider-side thinking budget (`low`, `medium`, `high`, `max`). Sent
+    /// verbatim as `reasoning_effort`; omitted when unset.
+    pub reasoning_effort: Option<String>,
     /// A non-loopback endpoint is a remote upload; it needs this explicit yes.
     pub allow_remote: bool,
     /// Longest side of the image actually uploaded; larger images are downscaled.
@@ -103,6 +109,49 @@ pub struct Vision {
 impl Vision {
     pub fn max_request_bytes(&self) -> u64 {
         self.max_request_mb.saturating_mul(1024 * 1024)
+    }
+
+    /// The key OMMA actually sends: the configured literal, else the value of
+    /// `api_key_env`, else the environment variable named by that field.
+    ///
+    /// The value is never written anywhere — not to the report, the doctor, a
+    /// log line or an error message — so this is the only place it is read.
+    pub fn resolved_api_key(&self) -> Option<String> {
+        if let Some(key) = &self.api_key
+            && !key.trim().is_empty()
+        {
+            return Some(key.trim().to_string());
+        }
+        let name = self.api_key_env.as_deref()?.trim();
+        if name.is_empty() {
+            return None;
+        }
+        std::env::var(name)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+
+    /// Where the key came from, for the doctor: never the key itself.
+    pub fn api_key_source(&self) -> Option<String> {
+        if self
+            .api_key
+            .as_deref()
+            .is_some_and(|key| !key.trim().is_empty())
+        {
+            return Some("config".to_string());
+        }
+        let name = self.api_key_env.as_deref()?.trim();
+        if name.is_empty() {
+            return None;
+        }
+        Some(
+            if std::env::var(name).is_ok_and(|value| !value.trim().is_empty()) {
+                format!("env {name}")
+            } else {
+                format!("env {name} (unset)")
+            },
+        )
     }
 }
 
@@ -171,6 +220,8 @@ impl Default for Vision {
             timeout_seconds: 120,
             max_tokens: 400,
             api_key: None,
+            api_key_env: None,
+            reasoning_effort: None,
             allow_remote: false,
             max_image_dimension: 1280,
             max_request_mb: 6,
@@ -312,6 +363,12 @@ impl Config {
         if let Some(raw) = env("OMMA_VISION_API_KEY") {
             self.vision.api_key = Some(raw);
         }
+        if let Some(raw) = env("OMMA_VISION_API_KEY_ENV") {
+            self.vision.api_key_env = Some(raw);
+        }
+        if let Some(raw) = env("OMMA_VISION_REASONING_EFFORT") {
+            self.vision.reasoning_effort = Some(raw);
+        }
         if let Some(raw) = env("OMMA_VISION_ALLOW_REMOTE") {
             self.vision.allow_remote = parse_bool(&raw, "OMMA_VISION_ALLOW_REMOTE")?;
         }
@@ -385,6 +442,27 @@ impl Config {
         if self.vision.max_request_mb == 0 {
             return Err(fail("vision.max_request_mb must be greater than 0".into()));
         }
+        if let Some(name) = &self.vision.api_key_env {
+            let name = name.trim();
+            if !name.is_empty() && !valid_env_name(name) {
+                return Err(fail(format!(
+                    "vision.api_key_env {name:?} is not an environment variable name"
+                )));
+            }
+        }
+        if let Some(effort) = &self.vision.reasoning_effort {
+            let effort = effort.trim().to_ascii_lowercase();
+            if !effort.is_empty()
+                && !matches!(
+                    effort.as_str(),
+                    "none" | "minimal" | "low" | "medium" | "high" | "max"
+                )
+            {
+                return Err(fail(format!(
+                    "vision.reasoning_effort {effort:?} is not one of none, minimal, low, medium, high, max"
+                )));
+            }
+        }
         if self.vision.enabled && self.vision.model.trim().is_empty() {
             return Err(fail(
                 "vision.model is required when vision.enabled = true".into(),
@@ -417,6 +495,15 @@ fn parse_env<T: std::str::FromStr>(raw: &str, key: &str) -> Result<T> {
         path: key.to_string(),
         message: format!("cannot parse {raw:?}"),
     })
+}
+
+/// An environment variable name: letters, digits and underscores, never
+/// starting with a digit. A name is not a secret; its value never leaves
+/// `Vision::resolved_api_key`.
+fn valid_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn parse_bool(raw: &str, key: &str) -> Result<bool> {

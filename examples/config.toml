@@ -41,6 +41,11 @@ allow_remote = false
 # Longest side uploaded to the model; larger images are downscaled first.
 max_image_dimension = 1280
 max_request_mb = 6
+# Name of an environment variable holding the API key: the config then contains
+# no secret. api_key = "..." (a 0600 file) and OMMA_VISION_API_KEY still work.
+# api_key_env = "ZAI_API_KEY"
+# Optional provider thinking budget: none|minimal|low|medium|high|max.
+# reasoning_effort = "max"
 
 # Restrict which paths the MCP server may read. Empty means any path this
 # process can read — fine for a single-user desktop, wrong for anything shared.

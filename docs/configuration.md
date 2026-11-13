@@ -90,6 +90,8 @@ Every section and key is optional.
 | `OMMA_VISION_MODEL` | `vision.model` |
 | `OMMA_VISION_TIMEOUT_SECONDS` | `vision.timeout_seconds` |
 | `OMMA_VISION_MAX_TOKENS` | `vision.max_tokens` |
+| `OMMA_VISION_API_KEY_ENV` | `vision.api_key_env` |
+| `OMMA_VISION_REASONING_EFFORT` | `vision.reasoning_effort` |
 | `OMMA_VISION_MAX_DIMENSION` | `vision.max_image_dimension` |
 | `OMMA_VISION_MAX_REQUEST_MB` | `vision.max_request_mb` |
 | `OMMA_VISION_API_KEY` | `vision.api_key` |

@@ -121,6 +121,11 @@ was disabled.
 `sent_width`, `sent_height`, `downscaled`, `request_bytes`. No API key is ever
 included.
 
+Two optional fields appear only when the provider reports them:
+`finish_reason` (`stop`, `length`, `content_filter`, …) and `reasoning_tokens`
+(tokens spent thinking). A `length` finish with no description is reported as a
+`vision_failed` warning naming `vision.max_tokens`, not as an empty answer.
+
 `sent_width`/`sent_height` are what the model actually received after downscaling
 (`vision.max_image_dimension`, `vision.max_request_mb`); the rest of the report
 always describes the original image. `downscaled` says whether the upload was
@@ -132,7 +137,7 @@ Codes currently emitted: `ocr_unavailable`, `ocr_language_missing`,
 `ocr_language_unavailable`, `ocr_failed`, `ocr_timeout`, `ocr_prepare_failed`,
 `colors_no_opaque_samples`, `image_mime_mismatch`, `ocr_structure_unavailable`,
 `ocr_low_confidence`, `layout_no_text_regions`, `layout_low_confidence_blocks`,
-`vision_failed`.
+`vision_failed`, `vision_unauthorized`, `vision_rate_limited`, `vision_timeout`.
 Consumers should treat unknown codes as informational.
 
 When every sampled pixel is transparent the palette is empty and

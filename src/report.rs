@@ -218,6 +218,14 @@ pub struct VisionOut {
     #[serde(default)]
     pub downscaled: bool,
     pub request_bytes: u64,
+    /// How the provider stopped: `stop`, `length`, `content_filter`… `null` when
+    /// the provider did not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+    /// Tokens the provider spent thinking before answering, when it reports them.
+    /// A reasoning model can spend the whole budget here and return no answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Clone)]

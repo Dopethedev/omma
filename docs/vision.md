@@ -90,15 +90,87 @@ Anything else speaking the same API (vLLM and friends) works the same way.
 | `model` | `OMMA_VISION_MODEL` | — | Model name the server knows |
 | `timeout_seconds` | `OMMA_VISION_TIMEOUT_SECONDS` | `120` | Whole-request deadline |
 | `max_tokens` | `OMMA_VISION_MAX_TOKENS` | `400` | Answer length ceiling |
-| `api_key` | `OMMA_VISION_API_KEY` | — | Sent as a bearer token if set |
-| `allow_remote` | `OMMA_VISION_ALLOW_REMOTE` | `false` | Permit a non-loopback endpoint |
+| `api_key` | `OMMA_VISION_API_KEY` | — | Literal bearer token; keep it in a 0600 file |
+| `api_key_env` | `OMMA_VISION_API_KEY_ENV` | — | Name of an environment variable holding the key |
+| `reasoning_effort` | `OMMA_VISION_REASONING_EFFORT` | — | `none`/`minimal`/`low`/`medium`/`high`/`max`; sent as `reasoning_effort` |
+| `allow_remote` | `OMMA_VISION_ALLOW_REMOTE` | `false` | Permit a non-loopback endpoint (https only) |
 | `max_image_dimension` | `OMMA_VISION_MAX_DIMENSION` | `1280` | Longest side uploaded |
 | `max_request_mb` | `OMMA_VISION_MAX_REQUEST_MB` | `6` | Encoded PNG ceiling |
 
 The endpoint must be `localhost`, `::1` or a literal `127.0.0.0/8` address. A
 hostname that merely looks like one (`127.0.0.1.example.com`) is treated as
 remote. Redirects are never followed, so a local server cannot bounce the upload
-elsewhere. URLs with embedded credentials are refused.
+elsewhere. URLs with embedded credentials are refused. A remote endpoint must be
+`https://`: an image and a bearer token do not cross a network in the clear.
+
+## Hosted providers
+
+The same provider code talks to a hosted API; only the configuration differs.
+GLM-5.3-Flash is served by more than one gateway, so the model id and endpoint
+must match the gateway you are billed by.
+
+| Gateway | Endpoint | Model id | Status |
+|---|---|---|---|
+| W&B Inference | `https://api.inference.wandb.ai/v1/chat/completions` | `zai-org/GLM-5.3-Flash` | **exercised with real images** |
+| Z.AI | `https://api.z.ai/api/paas/v4/chat/completions` | `glm-5.3-flash` | documented by the vendor; not called |
+
+Model facts from Z.AI's documentation (checked 2026-11-13): image input is an
+`image_url` content block carrying a base64 data URL — exactly what OMMA sends —
+`reasoning_effort` is supported (`max` is their recommendation), `thinking.type`
+only accepts `enabled`, and the context is 1M tokens with 128K maximum output.
+
+```toml
+[vision]
+enabled = true
+endpoint = "https://api.inference.wandb.ai/v1/chat/completions"
+model = "zai-org/GLM-5.3-Flash"
+allow_remote = true
+api_key_env = "WANDB_API_KEY"
+max_tokens = 2500
+```
+
+```sh
+export WANDB_API_KEY="<your-key>"
+omma screenshot.png --ask "What does this screen show, and where is the save button?"
+```
+
+To use Z.AI directly instead, change the two lines and the variable name:
+endpoint `https://api.z.ai/api/paas/v4/chat/completions`, model `glm-5.3-flash`,
+`api_key_env = "ZAI_API_KEY"`. Nothing else changes.
+
+## Credentials
+
+- The key is read in exactly one place (`Vision::resolved_api_key`) and sent as a
+  bearer token. It is never written to the report, the ledger, a log line, the
+  doctor, or an error message; if a provider echoes it back, it is replaced with
+  `[redacted]` before the text reaches any of those.
+- `api_key_env` is the recommended form: the config file then holds no secret and
+  can be shared or committed safely. `api_key` remains for a 0600 file.
+- `omma doctor` prints the *source* (`config`, `env NAME`, `env NAME (unset)`),
+  never the value.
+- A rejected credential is `vision_unauthorized` (HTTP 401/403), a quota or burst
+  limit is `vision_rate_limited` (HTTP 429). Neither one hides the OCR, colour,
+  grid or layout results, and neither one leaks the key into the message.
+
+## Token budget
+
+A reasoning provider spends tokens before it writes a word. GLM-5.3-Flash through
+W&amp;B Inference used 1,098 reasoning tokens on one desktop screenshot and wrote
+1,613 more; with `max_tokens = 600` every token went to thinking and the answer
+came back empty (`finish_reason: length`). The default of 400 is right for a small
+local model and far too small here — set `vision.max_tokens` to 2000–3000 for a
+hosted reasoning model.
+
+When that happens OMMA says so instead of "no content":
+
+```
+vision_failed: zai-org/GLM-5.3-Flash spent the whole 600 token budget before
+writing an answer (finish_reason: length, 600 of them reasoning); raise vision.max_tokens
+```
+
+The report also carries `vision.finish_reason` and `vision.reasoning_tokens` when
+the provider reports them, so a consumer can tell a truncated answer from a
+complete one.
 
 ## How the request is built
 
@@ -113,17 +185,33 @@ elsewhere. URLs with embedded credentials are refused.
 - The answer is read from `choices[0].message.content`, which may be a string or an
   array of typed parts.
 - Failures (unreachable, timeout, HTTP error, non-JSON, empty content) become a
-  `vision_failed` warning; the rest of the report is still returned.
+  `vision_*` warning naming the class; the rest of the report is still returned.
 
 ## What is verified, and what is not
 
-- Verified here: the request shape (system + user messages, data URI, bearer
-  token, size limits, downscaling) against local mock servers; timeout, HTTP
-  error, non-JSON, empty-content, unreachable-endpoint and redirect paths; the
-  full report with a mock answer, marked untrusted.
-- **Not verified:** a real model. No vision-language model was installed on the
-  development machine, so no answer in these tests came from a model. Expect to
-  tune `model`, `max_tokens` and the question for your server.
+**Run against a real provider** (W&B Inference, `zai-org/GLM-5.3-Flash`, 2026-11-13),
+four images through the release binary:
+
+| Image | Result |
+|---|---|
+| Bar chart (generated, 800×500) | chart type, title, all four labelled values (30/50/40/75), axis range and gridlines |
+| Architecture diagram (generated, 820×420) | all six boxes with labels and fills, and every arrow between them |
+| Desktop screenshot (1600×900, downscaled to 1280×720) | window and status bar layout, session id, the visible config lines, the highlighted user message, the input prompt |
+| 4K artwork (downscaled to 1280×720) | scene, composition, and an explicit observation-vs-inference split |
+
+Latency 2.6–14.5 s per image, 24 KB–1.7 MB per request; the screenshot used 1,341
+reasoning tokens. The MCP `image_base64` path was exercised against the same
+provider and returned the chart values correctly with `image.filename: "inline"`.
+
+Also verified against local mock servers: request shape, bearer token,
+`reasoning_effort` only when configured, size limits and downscaling, and every
+failure path — 401/403, 429, timeout, unreachable, non-JSON, empty content,
+redirects, truncated-by-token-budget. The key is asserted absent from JSON, stderr
+and `doctor` on success and failure, and the analysis survives every vision failure.
+
+**Not verified:** the Z.AI endpoint directly (the documented alternative), a local
+model on this machine (none installed), and any claim about model quality beyond
+these four images.
 
 ## Untrusted content
 

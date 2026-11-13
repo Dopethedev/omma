@@ -62,7 +62,7 @@ pub fn render(config: &Config, config_path: Option<&Path>) -> String {
         "disabled"
     };
     out.push_str(&format!(
-        "vision: {} endpoint={} model={} timeout={}s max_tokens={} api_key={} remote={}\n",
+        "vision: {} endpoint={} model={} timeout={}s max_tokens={} api_key={} remote={} effort={}\n",
         vision_state,
         config.vision.endpoint,
         if config.vision.model.is_empty() {
@@ -72,16 +72,22 @@ pub fn render(config: &Config, config_path: Option<&Path>) -> String {
         },
         config.vision.timeout_seconds,
         config.vision.max_tokens,
-        if config.vision.api_key.is_some() {
-            "configured"
-        } else {
-            "none"
-        },
+        // Presence and origin only: the value is a credential and is never read
+        // here, let alone printed.
+        config
+            .vision
+            .api_key_source()
+            .unwrap_or_else(|| "none".to_string()),
         if config.vision.allow_remote {
-            "allowed"
+            "allowed (https only)"
         } else {
             "loopback only"
-        }
+        },
+        config
+            .vision
+            .reasoning_effort
+            .as_deref()
+            .unwrap_or("default")
     ));
     if config.vision.enabled {
         match crate::vision::check_endpoint(&config.vision) {

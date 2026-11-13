@@ -178,9 +178,12 @@ fn run_bytes(
                     Some(out)
                 }
                 Err(err) => {
+                    // The provider classifies its own failure: a rejected key, a
+                    // rate limit and a timeout are different things to a user, and
+                    // the rest of the report still stands either way.
                     warnings.push(Warning {
-                        code: "vision_failed",
-                        message: err.to_string(),
+                        code: err.code,
+                        message: err.message,
                     });
                     None
                 }

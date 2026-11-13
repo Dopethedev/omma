@@ -20,12 +20,27 @@ fn http_response(body: &str) -> String {
 
 /// Accept one connection, capture the request, answer with `response`.
 fn spawn_mock(response: String) -> (u16, Receiver<String>) {
+    spawn_mock_delayed(response, Duration::ZERO)
+}
+
+/// A response with a non-200 status, so the provider's error path is exercised.
+fn http_error(status: u16, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {status} Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+fn spawn_mock_delayed(response: String, delay: Duration) -> (u16, Receiver<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock");
     let port = listener.local_addr().expect("addr").port();
     let (sender, receiver) = channel();
     std::thread::spawn(move || {
         if let Ok((stream, _)) = listener.accept() {
             let request = read_request(stream.try_clone().expect("clone stream"));
+            if !delay.is_zero() {
+                std::thread::sleep(delay);
+            }
             answer_into(stream, &response);
             let _ = sender.send(request);
         }
@@ -478,4 +493,350 @@ fn a_small_image_is_uploaded_at_its_own_size() {
     assert_eq!(json["vision"]["downscaled"], false);
     assert_eq!(json["vision"]["sent_width"], 600);
     assert_eq!(json["vision"]["sent_height"], 140);
+}
+
+// --- hosted provider: credentials, failure classes, effort ---------------
+
+const FAKE_KEY: &str = "sk-omma-test-not-a-real-key-0123456789";
+
+fn warning_codes(json: &serde_json::Value) -> Vec<String> {
+    json["warnings"]
+        .as_array()
+        .map(|warnings| {
+            warnings
+                .iter()
+                .filter_map(|warning| warning["code"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn the_api_key_is_read_from_the_named_environment_variable() {
+    let (port, requests) = spawn_mock(http_response(
+        r#"{"choices":[{"message":{"content":"a screenshot of a terminal"}}]}"#,
+    ));
+    let config = write_config(&format!(
+        "[vision]\nenabled = true\nendpoint = \"http://127.0.0.1:{port}/v1/chat/completions\"\n\
+         model = \"glm-5.3-flash\"\napi_key_env = \"OMMA_TEST_PROVIDER_KEY\"\n\
+         reasoning_effort = \"max\"\n"
+    ));
+    let output = run_env(
+        &[
+            &fixture("text.png"),
+            "--json",
+            "--vision",
+            "--config",
+            &config,
+        ],
+        &[("OMMA_TEST_PROVIDER_KEY", FAKE_KEY)],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+
+    let request = requests
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the mock must be called");
+    let lowered = request.to_ascii_lowercase();
+    assert!(
+        lowered.contains(&format!(
+            "authorization: bearer {}",
+            FAKE_KEY.to_lowercase()
+        )),
+        "the bearer token was not sent: {request}"
+    );
+    // The key travels in the header and nowhere else.
+    let body = request_body(&request);
+    assert!(body["reasoning_effort"] == "max", "{body}");
+    for stream in [stdout_text(&output), stderr_text(&output)] {
+        assert!(!stream.contains(FAKE_KEY), "the key leaked into the output");
+    }
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn the_doctor_reports_where_the_key_comes_from_but_never_the_key() {
+    let config = write_config(
+        "[vision]\nenabled = true\nmodel = \"glm-5.3-flash\"\napi_key_env = \"OMMA_TEST_DOCTOR_KEY\"\n",
+    );
+    let output = run_env(
+        &["doctor", "--config", &config],
+        &[("OMMA_TEST_DOCTOR_KEY", FAKE_KEY)],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let text = stdout_text(&output);
+    assert!(
+        text.contains("env OMMA_TEST_DOCTOR_KEY"),
+        "the doctor must name the source: {text}"
+    );
+    assert!(!text.contains(FAKE_KEY), "the doctor printed the secret");
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn a_rejected_key_is_named_and_the_analysis_still_returns() {
+    let (port, _requests) = spawn_mock(http_error(
+        401,
+        r#"{"error":{"message":"invalid api key"}}"#,
+    ));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("text.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "glm-5.3-flash"),
+            ("OMMA_VISION_API_KEY", FAKE_KEY),
+        ],
+    );
+    // Exit 3 is the documented contract when an explicitly requested backend
+    // produced nothing; the JSON below proves the rest of the report survived.
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    let codes = warning_codes(&json);
+    assert!(
+        codes.contains(&"vision_unauthorized".to_string()),
+        "{codes:?}"
+    );
+    assert!(json["vision"].is_null());
+    // The rest of the report is untouched by a vision failure.
+    assert_eq!(json["image"]["width"], 600);
+    assert_eq!(json["grid"]["width"], 64);
+    assert!(
+        json["ocr"]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("omma reads this line")
+    );
+    for stream in [stdout_text(&output), stderr_text(&output)] {
+        assert!(
+            !stream.contains(FAKE_KEY),
+            "the key leaked on the error path"
+        );
+    }
+}
+
+#[test]
+fn a_rate_limit_is_named_and_does_not_hide_the_rest_of_the_report() {
+    let (port, _requests) = spawn_mock(http_error(
+        429,
+        r#"{"error":{"message":"rate limit exceeded"}}"#,
+    ));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("solid.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "glm-5.3-flash"),
+        ],
+    );
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    let codes = warning_codes(&json_of(&output));
+    assert!(
+        codes.contains(&"vision_rate_limited".to_string()),
+        "{codes:?}"
+    );
+}
+
+#[test]
+fn a_vision_timeout_is_named_and_keeps_ocr() {
+    let (port, _requests) = spawn_mock_delayed(
+        http_response(r#"{"choices":[{"message":{"content":"too late"}}]}"#),
+        Duration::from_secs(5),
+    );
+    let config = write_config(&format!(
+        "[vision]\nenabled = true\nendpoint = \"http://127.0.0.1:{port}/v1/chat/completions\"\n\
+         model = \"glm-5.3-flash\"\ntimeout_seconds = 1\n"
+    ));
+    let output = run(&[
+        &fixture("text.png"),
+        "--json",
+        "--vision",
+        "--config",
+        &config,
+    ]);
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    let codes = warning_codes(&json);
+    assert!(codes.contains(&"vision_timeout".to_string()), "{codes:?}");
+    assert!(
+        json["ocr"]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Omma")
+    );
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn a_malformed_answer_is_a_warning_not_a_crash() {
+    let (port, _requests) = spawn_mock(http_response("this is not json"));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("text.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "glm-5.3-flash"),
+        ],
+    );
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    let codes = warning_codes(&json_of(&output));
+    assert!(codes.contains(&"vision_failed".to_string()), "{codes:?}");
+}
+
+#[test]
+fn a_remote_endpoint_must_be_https() {
+    // allow_remote is the operator's yes to sending an image off the machine; it
+    // is not a yes to sending it in the clear.
+    let config = write_config(
+        "[vision]\nenabled = true\nallow_remote = true\nmodel = \"glm-5.3-flash\"\n\
+         endpoint = \"http://api.z.ai/api/paas/v4/chat/completions\"\n",
+    );
+    let output = run(&[
+        &fixture("solid.png"),
+        "--json",
+        "--vision",
+        "--config",
+        &config,
+    ]);
+    assert_eq!(code(&output), 2, "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).contains("https"),
+        "{}",
+        stderr_text(&output)
+    );
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn reasoning_effort_is_sent_only_when_it_is_configured() {
+    let body = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+
+    let (port, requests) = spawn_mock(http_response(body));
+    let config = write_config(&format!(
+        "[vision]\nenabled = true\nendpoint = \"http://127.0.0.1:{port}/v1/chat/completions\"\n\
+         model = \"glm-5.3-flash\"\nreasoning_effort = \"high\"\n"
+    ));
+    let output = run(&[
+        &fixture("solid.png"),
+        "--json",
+        "--vision",
+        "--config",
+        &config,
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let request = requests
+        .recv_timeout(Duration::from_secs(10))
+        .expect("mock");
+    assert_eq!(request_body(&request)["reasoning_effort"], "high");
+    let _ = std::fs::remove_file(config);
+
+    let (port, requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("solid.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "glm-5.3-flash"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let request = requests
+        .recv_timeout(Duration::from_secs(10))
+        .expect("mock");
+    assert!(
+        request_body(&request).get("reasoning_effort").is_none(),
+        "a local server must not receive a field it never asked for"
+    );
+}
+
+#[test]
+fn an_invalid_key_variable_name_is_a_configuration_error() {
+    let config = write_config(
+        "[vision]\nenabled = true\nmodel = \"glm-5.3-flash\"\napi_key_env = \"not a name\"\n",
+    );
+    let output = run(&[
+        &fixture("solid.png"),
+        "--json",
+        "--vision",
+        "--config",
+        &config,
+    ]);
+    assert_eq!(code(&output), 2, "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).contains("environment variable name"),
+        "{}",
+        stderr_text(&output)
+    );
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn a_budget_spent_thinking_names_the_budget_instead_of_shrugging() {
+    // A reasoning model can burn every token before it writes a word; the old
+    // message ("no message content") sent the operator nowhere.
+    let body = r#"{"choices":[{"message":{"content":""},"finish_reason":"length"}],
+                   "usage":{"completion_tokens":600,"completion_tokens_details":{"reasoning_tokens":600}}}"#;
+    let (port, _requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let config = write_config(&format!(
+        "[vision]\nenabled = true\nendpoint = \"{endpoint}\"\nmodel = \"glm-5.3-flash\"\n\
+         max_tokens = 600\n"
+    ));
+    let output = run(&[
+        &fixture("solid.png"),
+        "--json",
+        "--vision",
+        "--config",
+        &config,
+    ]);
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    let message = json["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|warning| warning["code"] == "vision_failed")
+        .and_then(|warning| warning["message"].as_str())
+        .unwrap_or_default()
+        .to_string();
+    assert!(message.contains("max_tokens"), "{message}");
+    assert!(message.contains("600"), "{message}");
+    assert!(message.contains("reasoning"), "{message}");
+    let _ = std::fs::remove_file(config);
+}
+
+#[test]
+fn the_finish_reason_and_reasoning_tokens_are_reported_when_present() {
+    let body = r#"{"choices":[{"message":{"content":"a chart"},"finish_reason":"stop"}],
+                   "usage":{"completion_tokens_details":{"reasoning_tokens":42}}}"#;
+    let (port, _requests) = spawn_mock(http_response(body));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("solid.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "glm-5.3-flash"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    assert_eq!(json["vision"]["finish_reason"], "stop");
+    assert_eq!(json["vision"]["reasoning_tokens"], 42);
+
+    // A provider that says nothing extra must not gain empty keys.
+    let (port, _requests) = spawn_mock(http_response(
+        r#"{"choices":[{"message":{"content":"fine"}}]}"#,
+    ));
+    let endpoint = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let output = run_env(
+        &[&fixture("solid.png"), "--json", "--vision"],
+        &[
+            ("OMMA_VISION_ENDPOINT", endpoint.as_str()),
+            ("OMMA_VISION_MODEL", "local"),
+        ],
+    );
+    assert_eq!(code(&output), 0, "{}", stderr_text(&output));
+    let json = json_of(&output);
+    assert!(json["vision"].get("finish_reason").is_none());
+    assert!(json["vision"].get("reasoning_tokens").is_none());
 }
