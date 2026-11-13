@@ -164,3 +164,61 @@ fn multiple_languages_are_accepted_when_installed() {
     let json = json_of(&output);
     assert_eq!(json["ocr"]["language"], requested);
 }
+
+/// A backend that is a wrapper script starts children of its own. Killing only
+/// the script leaves them holding the output pipes, so the timeout used to hang
+/// instead of firing: the readers waited on a `sleep` nobody had killed.
+#[cfg(unix)]
+#[test]
+fn a_wrapper_backend_times_out_instead_of_hanging() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    let dir = temp_path("fake-backend");
+    std::fs::create_dir_all(&dir).expect("cannot create the fake backend directory");
+    let script = dir.join("tesseract");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\n\
+         for a in \"$@\"; do\n\
+           case \"$a\" in\n\
+             --version) echo 'tesseract 5.5.4'; echo '  eng'; exit 0;;\n\
+             --list-langs) echo 'List of available languages'; echo 'eng'; exit 0;;\n\
+           esac\n\
+         done\n\
+         sleep 30\n",
+    )
+    .expect("cannot write the fake backend");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("cannot make the fake backend executable");
+
+    let config = write_config("[ocr]\ntimeout_seconds = 1\n");
+    let path = format!(
+        "{}:{}",
+        dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let started = Instant::now();
+    let output = run_env(
+        &[&fixture("text.png"), "--json", "--config", &config],
+        &[("PATH", &path)],
+    );
+    let elapsed = started.elapsed();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(code(&output), 0, "stderr: {}", stderr_text(&output));
+    assert!(
+        elapsed < Duration::from_secs(25),
+        "a hung backend must not hang the tool; took {elapsed:?}"
+    );
+    let report = json_of(&output);
+    let codes: Vec<&str> = report["warnings"]
+        .as_array()
+        .map(|list| list.iter().filter_map(|w| w["code"].as_str()).collect())
+        .unwrap_or_default();
+    assert!(
+        codes.contains(&"ocr_timeout"),
+        "expected an ocr_timeout warning, got {codes:?}"
+    );
+}

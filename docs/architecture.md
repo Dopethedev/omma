@@ -52,7 +52,10 @@ blocking pool.
    same prepared image; the longer text wins; that pass is then re-run with the
    `tsv` config to obtain structure. Boxes from the upscaled frame are divided
    back into analyzed pixels. The image is fed over stdin, so no temporary file
-   is ever written.
+   is ever written. Each invocation leads its own process group, and the whole
+   group is killed on timeout: a backend that is a wrapper script starts children
+   of its own, and killing only the script leaves them holding the pipes open, so
+   the timeout would hang rather than fire.
 6. **Layout.** One region per Tesseract text block that qualifies as text (two or
    more alphanumeric characters, confidence at or above `ocr.min_confidence`):
    measured box, position label from the box centre in thirds, its confidence and

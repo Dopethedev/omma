@@ -31,6 +31,11 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ureq = { version = "3.5.1", features = ["json"] }
 
+[target.'cfg(unix)'.dependencies]
+# Only for kill(2): the OCR child gets its own process group so a wrapper
+# script's children die with it instead of holding the pipes open.
+libc = "0.2"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

@@ -904,6 +904,7 @@ version = "0.2.0"
 dependencies = [
  "clap",
  "image",
+ "libc",
  "rmcp",
  "serde",
  "serde_json",

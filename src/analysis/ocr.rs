@@ -393,13 +393,26 @@ enum Run {
 
 /// Run a child with a writer thread and two reader threads, then poll for the
 /// deadline so a hung backend cannot hang the tool.
+///
+/// The child leads its own process group (Unix): killing only the child leaves
+/// any grandchildren it started — a wrapper script's `sleep`, say — holding the
+/// output pipes, and the readers would then block on them forever. The group is
+/// killed instead, and the reads are bounded anyway so a survivor cannot wedge
+/// the caller after the process itself is gone.
 fn run(exe: &Path, args: &[&str], input: &[u8], timeout: Duration) -> std::io::Result<Run> {
-    let mut child = Command::new(exe)
+    let mut command = Command::new(exe);
+    command
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id() as i32;
 
     let mut stdin = child
         .stdin
@@ -418,15 +431,17 @@ fn run(exe: &Path, args: &[&str], input: &[u8], timeout: Duration) -> std::io::R
     let writer = std::thread::spawn(move || {
         let _ = stdin.write_all(&payload);
     });
-    let out_reader = std::thread::spawn(move || {
+    let (out_tx, out_rx) = std::sync::mpsc::channel();
+    let (err_tx, err_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
         let mut buffer = Vec::new();
         let _ = stdout.read_to_end(&mut buffer);
-        buffer
+        let _ = out_tx.send(buffer);
     });
-    let err_reader = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let mut buffer = Vec::new();
         let _ = stderr.read_to_end(&mut buffer);
-        buffer
+        let _ = err_tx.send(buffer);
     });
 
     let deadline = Instant::now() + timeout;
@@ -437,8 +452,7 @@ fn run(exe: &Path, args: &[&str], input: &[u8], timeout: Duration) -> std::io::R
             None => {
                 if Instant::now() >= deadline {
                     timed_out = true;
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    stop(&mut child, pid);
                     break false;
                 }
                 std::thread::sleep(Duration::from_millis(5));
@@ -447,8 +461,11 @@ fn run(exe: &Path, args: &[&str], input: &[u8], timeout: Duration) -> std::io::R
     };
 
     let _ = writer.join();
-    let stdout = out_reader.join().unwrap_or_default();
-    let stderr = err_reader.join().unwrap_or_default();
+    // Bounded: after a normal exit the reads finish at once, and after a kill
+    // only a surviving grandchild could still be holding the pipe.
+    let grace = Duration::from_secs(2);
+    let stdout = out_rx.recv_timeout(grace).unwrap_or_default();
+    let stderr = err_rx.recv_timeout(grace).unwrap_or_default();
     if timed_out {
         return Ok(Run::TimedOut);
     }
@@ -457,6 +474,23 @@ fn run(exe: &Path, args: &[&str], input: &[u8], timeout: Duration) -> std::io::R
         stdout,
         stderr,
     })
+}
+
+/// Kill the child and everything it started.
+#[cfg(unix)]
+fn stop(child: &mut std::process::Child, pid: i32) {
+    // Negative pid addresses the group the child leads, set by process_group(0).
+    unsafe {
+        libc::kill(-pid, libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(not(unix))]
+fn stop(child: &mut std::process::Child, _pid: i32) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 #[derive(Debug, Clone)]
