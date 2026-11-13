@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/Dopethedev/omma/security/advisories/new
+    about: Report vulnerabilities privately, never in a public issue.
+  - name: Usage question
+    url: https://github.com/Dopethedev/omma/blob/master/docs/cli.md
+    about: The CLI, JSON contract, MCP server and vision setup are documented in docs/.

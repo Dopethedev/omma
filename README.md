@@ -1,15 +1,60 @@
+<p align="center">
+  <img src="docs/assets/banner.png" alt="omma — images to structured text for AI agents" width="820">
+</p>
+
 # omma
 
 *ὄμμα — Greek for "eye".*
 
-**Give a text-only model eyes.** `omma` turns an image into structured text and
-JSON that an AI agent can reason about — locally, with no model changes and no
-cloud service.
+**Give a text-only model eyes.** `omma` turns an image into structured text and JSON
+an AI agent can reason about: OCR with boxes and confidence, colour palette, a
+spatial colour grid, layout regions, and a description from a vision model — local
+or hosted. One engine behind a CLI and an MCP server.
+
+<p>
+  <a href="https://github.com/Dopethedev/omma/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Dopethedev/omma/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Dopethedev/omma/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Dopethedev/omma?label=release"></a>
+  <img alt="Rust 1.89+" src="https://img.shields.io/badge/rust-1.89%2B-orange">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-lightgrey">
+  <a href="LICENSE-MIT"><img alt="Licence" src="https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue"></a>
+</p>
+
+## Thirty seconds
 
 ```console
-$ omma screenshot.png
-$ omma screenshot.png --json
+$ cargo install --git https://github.com/Dopethedev/omma --locked   # or a release binary
+$ omma doctor                          # what this machine can do
+$ omma screenshot.png                  # a human report
+$ omma screenshot.png --json           # the same, as data
 $ omma screenshot.png --ask "What does the error dialog say?"
+```
+
+```console
+$ omma tests/fixtures/text.png
+== text.png  (png 600x140, 8 KiB, aspect 4.29)
+84000 pixels, rgb8
+
+== text (OCR [untrusted], eng, psm 6, conf 90.6)
+Omma reads this line
+
+dominant colours (2304 samples)
+  #f8f8f8  83.85%
+  #e8e8e8   1.65%
+  #a0a0a0   1.48%
+  ...
+average #f3f3f3  brightness 0.95  saturation 0.00
+
+colour grid 64x36 (hex per cell, every 4. cell left → right, top → bottom; JSON carries all 64x36)
+#ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff #ffffff
+#ffffff #595959 #ffffff #ffffff #ffffff #ffffff #ffffff #e8e8e8 #ffffff #9f9f9f #ffffff #9f9f9f #ffffff #ffffff #ffffff #ffffff
+```
+
+```
+              image ──► decode ──► tesseract (stdin) ──► text + boxes + hierarchy
+                          │                                   │
+                          ├──► palette + 64×36 grid           ├──► layout regions
+                          │                                   │
+                          └──► vision endpoint (optional) ────┴──► one JSON report
 ```
 
 ## What it is

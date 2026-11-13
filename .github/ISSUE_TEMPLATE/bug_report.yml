@@ -1,0 +1,53 @@
+name: Bug report
+description: Something OMMA did that it should not have, or did not do at all
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A reproduction is worth more than a description:
+        the image (or a small synthetic one), the exact command, and the output.
+        For security problems use the private advisory flow in [SECURITY.md](../blob/master/SECURITY.md) instead.
+  - type: input
+    id: version
+    attributes:
+      label: OMMA version
+      description: Output of `omma --version`
+      placeholder: omma 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux x86_64
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows x86_64
+        - Other / built from source
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and input
+      description: The exact command line, plus what the image was (a screenshot? a photo? how large?)
+      placeholder: |
+        omma screenshot.png --json --ask "Describe this screen"
+        image: 1920x1080 PNG, taken on niri
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Paste the output, `omma doctor`, and any warning codes from the JSON.
+    validations:
+      required: true

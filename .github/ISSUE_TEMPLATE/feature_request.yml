@@ -1,0 +1,43 @@
+name: Feature request
+description: A capability OMMA should have, or a rough edge worth smoothing
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and where does OMMA get in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: |
+        Concrete behaviour helps: an input, the output you expect, and which part
+        of the JSON it belongs to. If it adds a dependency or a command, say why
+        it cannot live inside an existing one.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - OCR / text extraction
+        - Colour / grid
+        - Layout
+        - Vision (local or hosted)
+        - MCP
+        - CLI / configuration
+        - JSON schema
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Project constraints
+      description: OMMA stays dependency-light, offline by default and honest about what is verified.
+      options:
+        - label: This can work without a cloud service (or is explicitly opt-in)
+        - label: This does not remove the existing JSON fields or exit-code meanings
