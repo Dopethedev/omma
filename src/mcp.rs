@@ -37,8 +37,8 @@ const ANALYZE_SCHEMA: &str = r#"{
     "ocr": { "type": "boolean", "default": true, "description": "Run OCR (Tesseract, if installed)." },
     "colors": { "type": "boolean", "default": true, "description": "Run colour analysis and the spatial grid." },
     "layout": { "type": "boolean", "default": true, "description": "Derive text regions from OCR boxes." },
-    "vision": { "type": "boolean", "default": false, "description": "Ask the configured local vision model for a description." },
-    "ask": { "type": "string", "description": "Question for the local vision model; implies vision." },
+    "vision": { "type": "boolean", "default": false, "description": "Ask the configured vision model (local or hosted) for a description of the image." },
+    "ask": { "type": "string", "description": "Question for the vision model; implies vision." },
     "language": { "type": "string", "description": "OCR language(s), e.g. \"eng\" or \"eng+deu\"." },
     "max_colors": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Number of dominant colours." },
     "region": { "type": "string", "description": "Crop to analyze: X,Y,W,H in source pixels." }

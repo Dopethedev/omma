@@ -1,12 +1,13 @@
-# Local vision setup
+# Vision setup (local or hosted)
 
-OMMA's vision path asks one locally hosted, OpenAI-compatible vision-language
-model about the image and returns its answer as text alongside the measured data
-(OCR, colours, grid, layout). Nothing leaves the machine unless you explicitly
-allow a remote endpoint.
+OMMA's vision path asks one OpenAI-compatible vision-language model about the
+image and returns its answer as text alongside the measured data (OCR, colours,
+grid, layout). The model can run on this machine (Ollama, llama.cpp, LM Studio,
+vLLM) or sit behind a hosted API (GLM-5.3-Flash), and no image leaves the machine
+until you configure a remote endpoint and allow it.
 
-This guide covers what to install, how to point OMMA at it, and what is and is
-not verified.
+This guide covers what to install, how to point OMMA at it, what it costs in
+tokens, and what is and is not verified.
 
 ## What it buys you
 

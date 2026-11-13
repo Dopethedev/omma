@@ -14,7 +14,7 @@ cargo build --release
 
 - [x] Formatting clean.
 - [x] Clippy clean at `-D warnings` for all targets and features.
-- [x] Tests pass: 90 tests (0 failed) with Tesseract installed; OCR tests skip with
+- [x] Tests pass: 101 tests (0 failed) with Tesseract installed; OCR tests skip with
       a printed note when it is absent.
 - [x] Release profile builds (thin LTO, one codegen unit, stripped).
 
@@ -62,14 +62,17 @@ omma IMAGE            # human report
 - [x] Unreachable endpoint → exit 3, analysis still returned.
 - [x] Non-loopback endpoint refused without `allow_remote`; credentials in a URL
       refused; redirects never followed.
-- [ ] **Real local vision model: not verified** — none is installed on this
-      machine. Do this before advertising the feature as tested:
-
-      ```sh
-      # e.g. Ollama; the model download is several GB and needs approval
-      ollama pull qwen2.5vl:7b
-      omma screenshot.png --ask "Describe this image." --model qwen2.5vl:7b
-      ```
+- [x] **Real vision: verified** — GLM-5.3-Flash through W&B Inference on four
+      image types (chart, diagram, desktop screenshot, 4K artwork); the MCP inline
+      path against the same provider.
+- [x] Key handling: `api_key_env` names an environment variable; the value never
+      appears in JSON, stderr, the doctor or an error message (asserted on success
+      and on a 401).
+- [x] Remote endpoints require `allow_remote` **and** `https://`.
+- [ ] **Real local vision model: not run here** — none is installed, so the local
+      path is verified against a mock server. Expect to check it against your own
+      server: `ollama pull qwen2.5vl:7b` (several GB) then
+      `omma shot.png --ask "Describe this image." --model qwen2.5vl:7b`.
 
 ## 6. MCP
 
@@ -155,7 +158,7 @@ runner is the reliable second path. A job that never gets a runner must be rerun
       homepage or repository" warning is gone.
 - [x] Clean-room build: the tree copied to a fresh directory, built with
       `--locked --offline` and a separate target directory, produced a
-      **bit-identical** binary (same SHA-256). `cargo test` there: 90 passed.
+      **bit-identical** binary (same SHA-256). `cargo test` there: 101 passed.
 - [x] Release artifacts are the CI-built binaries for the three tested platforms,
       each with a `.sha256` beside it; verify with `sha256sum -c` (or
       `shasum -a 256 -c` on macOS).

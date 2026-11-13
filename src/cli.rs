@@ -89,7 +89,7 @@ pub struct AnalyzeArgs {
     #[arg(long, value_name = "X,Y,W,H")]
     pub region: Option<String>,
 
-    /// Ask a local vision model one question about the image.
+    /// Ask the configured vision model one question about the image.
     #[arg(long, value_name = "QUESTION")]
     pub ask: Option<String>,
 

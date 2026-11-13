@@ -34,10 +34,13 @@ What it extracts:
   like text (two or more alphanumeric characters, confidence at or above the
   threshold) before it becomes a region, so photographs do not produce dozens of
   one-character "regions". No objects, buttons or icons are ever invented.
-- **Optional vision** — one question sent to a local OpenAI-compatible server
-  (Ollama's `/v1`, llama.cpp, LM Studio, vLLM), answered as text.
+- **Vision** — one question sent to an OpenAI-compatible server and answered as
+  text: a local one (Ollama's `/v1`, llama.cpp, LM Studio, vLLM) or a hosted one
+  (GLM-5.3-Flash through W&B Inference or Z.AI). Descriptions are marked
+  `untrusted`, and the image is downscaled to a configured ceiling before upload.
 
-Everything except the optional vision call works offline.
+Everything except the vision call works offline, and no image leaves the machine
+unless a remote endpoint was configured explicitly.
 
 ## Why
 
@@ -58,7 +61,7 @@ image anywhere, without a GUI, and without replacing the model.
                  colours              OCR                  layout
               (palette, grid)    (tesseract tsv)    (regions + labels)
                                         │
-                            optional: local vision model
+                            optional: local or hosted vision model
                                         │
                                  text or JSON
 ```
@@ -77,9 +80,9 @@ $ install -m 755 target/release/omma ~/.local/bin/omma
 
 Or run it from the checkout: `cargo run -- image.png`.
 
-CI builds and tests a release binary on Ubuntu x86_64, macOS arm64 and Windows
-x86_64, and publishes it with a `.sha256` per platform (see
-[docs/release-notes-0.1.0.md](docs/release-notes-0.1.0.md)). The Linux binary is
+CI builds and tests a release binary on Ubuntu x86_64, macOS arm64, macOS x86_64
+and Windows x86_64, and publishes it with a `.sha256` per platform (see
+[docs/release-notes-0.2.0.md](docs/release-notes-0.2.0.md)). The Linux binary is
 dynamically linked and needs glibc 2.39 or newer; the source build has no such
 constraint.
 
@@ -88,7 +91,7 @@ constraint.
 | Tool | Needed for | Notes |
 |---|---|---|
 | `tesseract` 5.x | OCR | Without it, `ocr` is `null` and a warning explains why; everything else still runs. |
-| A local vision server | `--ask` / `--vision` | Any OpenAI-compatible `/v1/chat/completions` that accepts `image_url` data URIs. |
+| A vision endpoint | `--ask` / `--vision` | Any OpenAI-compatible `/v1/chat/completions` accepting `image_url` data URIs — local (Ollama, llama.cpp, LM Studio) or hosted (GLM-5.3-Flash) with the key in an environment variable. |
 
 Nothing else is required at runtime: decoding, colour analysis and JSON are pure
 Rust.
@@ -113,7 +116,7 @@ omma analyze IMAGE            # explicit subcommand form
 | `--layout` | Run layout analysis only |
 | `--language eng,deu` | OCR language(s); repeatable, `,` or `+` separated |
 | `--max-colors N` | Dominant colours to report (1–64) |
-| `--ask "QUESTION"` | Ask the local vision model |
+| `--ask "QUESTION"` | Ask the configured vision model |
 | `--vision` | Ask with the default question |
 | `--model NAME` | Vision model to use |
 | `--output FILE` | Write the result to a file (stdout stays empty) |
@@ -340,9 +343,11 @@ Stated plainly, because they matter more than the feature list:
 - **Dense screens produce coarse regions.** A full desktop is one browser/page
   block to Tesseract, so `layout.regions` can be a single large region. Sparse
   text on a plain background segments well; a busy UI does not.
-- **Vision output quality is the model's**, not OMMA's. No vision server was
-  installed on the development machine, so the live path is verified against a
-  protocol-level stub and a mock server, not a real model.
+- **Vision output quality is the model's**, not OMMA's. It has been exercised end
+  to end with GLM-5.3-Flash on four image types (chart, diagram, desktop
+  screenshot, 4K artwork) — see [docs/vision.md](docs/vision.md) for what was run
+  and what was not. No local model was installed on the development machine, so
+  the local path is verified against a mock server.
 - **OCR languages** beyond `eng` require Tesseract language packs; the installed
   set is reported by `omma doctor` and missing ones produce warnings.
 - **Colour sampling resizes straight (non-premultiplied) alpha.** A hard edge

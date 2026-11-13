@@ -70,11 +70,37 @@ Read from stdin passes the same size, format and decode limits as a file.
 ```console
 $ omma shot.png --ask "What does the dialog say?"
 $ omma shot.png --vision --model qwen2.5vl:7b
+$ omma chart.png --ask "Explain the trend." --max-colors 8
 ```
 
 `--ask` sends the analyzed image to the configured endpoint; `--vision` uses
-`"Describe this image."`. The description is marked `untrusted` in the report.
-Vision is never called unless asked.
+`"Describe this image."`. The endpoint may be local (Ollama, llama.cpp, LM Studio)
+or hosted (GLM-5.3-Flash via W&B Inference or Z.AI — see
+[vision.md](vision.md)); `--model` overrides `vision.model` for the run.
+The description is marked `untrusted` in the report. Vision is never called
+unless asked, and the image is downscaled to `vision.max_image_dimension`
+(1280) / `vision.max_request_mb` (6) before upload; `vision.sent_width`,
+`sent_height`, `downscaled` and `request_bytes` say what was actually sent.
+
+A hosted reasoning model spends tokens before it answers, so a small
+`vision.max_tokens` can be consumed by thinking and return no text at all. Set it
+to 2000–3000 for those providers; if the budget runs out, OMMA reports a
+`vision_failed` warning that names `max_tokens` instead of claiming an empty
+answer.
+
+## Options at a glance
+
+| Option | Effect |
+|---|---|
+| `--json`, `--format json`, `--pretty` | JSON output, optionally indented |
+| `--output FILE` | Write the result to a file; stdout stays empty |
+| `--region X,Y,W,H` | Analyze one crop, in source pixels |
+| `--ask "…"` / `--vision` | Ask the configured vision model / ask the default question |
+| `--model NAME` | Vision model for this run |
+| `--max-colors N` | Dominant colours to report (1–64) |
+| `--language LANG` | OCR languages, repeatable or comma-separated |
+| `--no-ocr`, `--ocr`, `--colors`, `--layout` | Select subsystems exclusively |
+| `--config FILE` | Configuration file to use |
 
 ## Exit codes
 
@@ -98,5 +124,6 @@ $ omma doctor
 
 Reports the version, build target, config file actually used, Tesseract version
 and installed languages, OCR settings, vision endpoint/model state (never the
-API key, only whether one is configured), resource limits, colour settings, MCP
-restrictions and the logging level.
+API key — only its source: `config`, `env NAME` or `none`), the remote-endpoint
+policy, `reasoning_effort`, resource limits, colour settings, MCP restrictions
+and the logging level.

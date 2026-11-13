@@ -35,15 +35,18 @@ this build; the generic form is what the implementation is tested to speak.
 
 ### `analyze_image`
 
-Input schema (`additionalProperties: false`, `image_path` required):
+Input schema (`additionalProperties: false`; supply exactly one of `image_path` or
+`image_base64`, expressed as `oneOf`):
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `image_path` | string | — | Local image file to analyze; stdin (`-`) is refused |
+| `image_base64` | string | — | The image bytes; a `data:...;base64,` URI is accepted |
+| `mime_type` | string | — | Declared media type; checked against the bytes, never trusted |
 | `ocr` | boolean | true | Run OCR |
 | `colors` | boolean | true | Palette + spatial grid |
 | `layout` | boolean | true | Text regions from OCR boxes |
-| `vision` | boolean | false | Ask the configured local model |
+| `vision` | boolean | false | Ask the configured vision model (local or hosted) |
 | `ask` | string | — | Question for the model; implies `vision` |
 | `language` | string | configured | OCR languages, `eng` or `eng+deu` |
 | `max_colors` | integer 1–64 | configured | Dominant colours |
@@ -72,6 +75,25 @@ Two kinds, deliberately:
 - **Protocol errors** only for a request the server cannot route at all, such as
   an unknown tool name.
 
+## Inline images (`image_base64`)
+
+An agent that already holds the bytes — a pasted screenshot, a generated chart, a
+file it read itself — can send them directly. No temporary file is written and no
+filesystem permission is involved.
+
+- Exactly one source per call: both or neither is a tool error.
+- The payload is decoded under the same `general.max_file_size_mb` limit as a file
+  (checked before and during decoding), then handed to the same decoder, the same
+  `image` crate limits and the same pixel/dimension checks.
+- The format comes from the bytes. `mime_type` is optional and, when it disagrees
+  with the detected format, produces an `image_mime_mismatch` warning — the
+  content wins.
+- Malformed base64, empty payloads, SVG/XML markup, unknown formats and oversized
+  images are tool errors, never crashes.
+- The report's `image.filename` is `inline`.
+- Inline input grants no new access: it is data the client already had, and the
+  path restrictions below still govern every path.
+
 ## Filesystem boundary
 
 An MCP client must not get an unrestricted filesystem interface.
@@ -96,6 +118,24 @@ allowed_directories = ["/home/you/Pictures", "/home/you/projects/site/assets"]
 
 ## Vision through MCP
 
-`vision: true` or `ask: "..."` uses the configured endpoint. The loopback rule
-still applies, so an MCP client cannot turn OMMA into a way of uploading images
-to a remote host.
+`vision: true` or `ask: "..."` uses the configured endpoint, local or hosted. The
+endpoint policy still applies: a remote endpoint needs `allow_remote` and
+`https://`, so an MCP client cannot turn OMMA into a way of uploading images
+somewhere the operator did not configure.
+
+## Client image-forwarding, honestly
+
+The protocol carries the bytes fine; the client decides whether to send them.
+
+- A tool receives what the client puts in its arguments. OMMA exposes
+  `image_base64` so a client *can* forward an attachment as data.
+- Chat applications that paste images into a conversation and hand that
+  conversation to the model do **not** automatically forward the image to an
+  arbitrary MCP tool. Unless the client resolves the attachment to bytes and puts
+  them in `arguments.image_base64` (or saves a file and passes `image_path`), the
+  tool sees nothing.
+- Verified here: any client that can send a JSON string works — the official
+  TypeScript SDK, a hand-written stdio client, and the harness driving this
+  project all exercised the inline path against a real model.
+- Text-only agents can therefore use OMMA as their eyes: the client forwards the
+  bytes, OMMA returns text, the agent reasons over it.
