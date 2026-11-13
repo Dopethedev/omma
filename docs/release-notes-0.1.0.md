@@ -36,6 +36,26 @@ $ omma mcp serve
   shell, OCR timeouts, loopback-only vision by default, redirects not followed,
   nothing logged but diagnostics.
 
+## Fixed before this release
+
+An adversarial audit ran against the release candidate. Five defects it confirmed
+are fixed here, each with a regression test:
+
+- **Vision**: the loopback check accepted any host starting with `127.`, so
+  `127.0.0.1.attacker.example` was treated as local and the image could leave the
+  machine with `allow_remote = false`. Only `localhost`, `::1` and a parsed 127/8
+  literal count as local now.
+- **MCP**: `image_path: "-"` made the server read its own stdin — the JSON-RPC
+  channel — and wedge the request. It is refused with a tool error.
+- **Text output**: file names, OCR text, region content and model answers were
+  printed raw, so an escape sequence could drive the terminal. Control characters
+  are replaced (newline and tab kept); JSON was already escaped.
+- **CLI**: `--json --format text` printed a human report and exited 0. It is a
+  usage error now.
+- **Colour**: a fully transparent image reported `samples: 0` with
+  `average_rgb: [0,0,0]`, which reads as black. It now carries the
+  `colors_no_opaque_samples` warning.
+
 ## Install
 
 ### Prebuilt binaries
@@ -83,15 +103,14 @@ SHA-256. CI builds on each platform from the same lockfile.
 
 ## Compatibility
 
-Verified by running the suite natively on each platform (GitHub Actions, three
-jobs plus an MSRV job):
+Verified by running the suite natively on each platform (GitHub Actions: four platform jobs plus an MSRV job):
 
 | Platform | Runner | Tesseract | Tests |
 |---|---|---|---|
-| Ubuntu x86_64 | `ubuntu-latest` | 5.5.0 (apt) | 68 passed |
-| macOS arm64 | `macos-latest` | 5.5.4 (brew) | 68 passed |
-| macOS x86_64 | `macos-15-intel` | 5.5.4 (brew) | 68 passed |
-| Windows x86_64 | `windows-latest` | 5.5.x (choco) | 68 passed |
+| Ubuntu x86_64 | `ubuntu-latest` | 5.5.0 (apt) | 75 passed |
+| macOS arm64 | `macos-latest` | 5.5.4 (brew) | 75 passed |
+| macOS x86_64 | `macos-15-intel` | 5.5.4 (brew) | 75 passed |
+| Windows x86_64 | `windows-latest` | 5.5.x (choco) | 75 passed |
 | Rust 1.89.0 | `ubuntu-latest` | 5.5.x (apt) | build + all test targets compile |
 
 All jobs also run formatting, Clippy at `-D warnings`, a release build, and smoke
