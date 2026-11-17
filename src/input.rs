@@ -302,6 +302,7 @@ pub fn redact(image: &mut DynamicImage, specs: &[String]) -> Result<Vec<RegionMe
         );
         applied.push(RegionMeta {
             source: None,
+            replacement: "blank",
             x,
             y,
             width,
@@ -344,6 +345,7 @@ pub fn crop(image: DynamicImage, spec: &str) -> Result<(DynamicImage, RegionMeta
         cropped,
         RegionMeta {
             source: None,
+            replacement: "blank",
             x,
             y,
             width,

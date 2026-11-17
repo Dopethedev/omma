@@ -57,6 +57,9 @@ pub struct RegionMeta {
     /// `card`, `email` or `phone` when it was detected.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<&'static str>,
+    /// What the pixels were replaced with. Explicit, so a caller never has to
+    /// infer an intentional blank from missing text.
+    pub replacement: &'static str,
     pub x: u32,
     pub y: u32,
     pub width: u32,
