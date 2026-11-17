@@ -34,6 +34,12 @@ fn the_covered_text_is_absent_from_the_report() {
         !hidden_text.contains("Omma"),
         "redacted text survived: {hidden_text:?}"
     );
+    // Opaque paint over everything leaves nothing to recognise: not a partial
+    // reading, not a stray character, and not a placeholder.
+    assert!(
+        hidden_text.trim().is_empty(),
+        "fully covered frame still produced text: {hidden_text:?}"
+    );
 }
 
 #[test]

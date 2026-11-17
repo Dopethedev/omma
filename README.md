@@ -423,6 +423,10 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
   them, so the covered area is missing from OCR, colours, layout *and* the copy
   sent to a vision model. It is the only way to keep details out of a hosted
   model today: cropping changes what the model sees, redaction changes both.
+  A box that runs past the edge is clamped to the frame, and the report carries
+  the clamped rectangle, so the JSON always says what was actually covered. A
+  zero-size box, or one outside the image, is refused with exit 2 rather than
+  silently doing nothing.
 - Text mode strips control characters from image-derived strings (file names, OCR
   text, model answers), so they cannot drive the terminal with escape sequences.
 - MCP paths are canonicalized and can be restricted to allowed directories;
