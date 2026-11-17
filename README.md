@@ -419,6 +419,9 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
 - Tesseract is spawned with explicit arguments — no shell — with a timeout, its
   output captured, and the image fed over stdin so no temporary file is written.
 - OCR text, image contents and API keys are never logged.
+- The copy sent to a vision model is re-encoded from the decoded pixels, so EXIF,
+  GPS tags and comments in the original file never leave the machine. A test
+  asserts the encoded PNG carries no metadata chunks.
 - `--redact X,Y,W,H` paints rectangles out of the pixels before anything reads
   them, so the covered area is missing from OCR, colours, layout *and* the copy
   sent to a vision model. It is the only way to keep details out of a hosted
@@ -429,8 +432,10 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
   silently doing nothing.
 - Text mode strips control characters from image-derived strings (file names, OCR
   text, model answers), so they cannot drive the terminal with escape sequences.
-- MCP paths are canonicalized and can be restricted to allowed directories;
-  symlinks are resolved before the check, so a link cannot escape a root.
+- MCP paths are canonicalized and can be restricted to allowed directories.
+  Symlinks are resolved first, so a link cannot escape a root, and the check runs
+  against the file that was actually opened, so one swapped in afterwards cannot
+  redirect the read either.
 
 ## Development
 

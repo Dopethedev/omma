@@ -178,3 +178,27 @@ fn a_fully_transparent_image_reports_no_palette_rather_than_black() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn the_encoded_png_carries_no_metadata_chunks() {
+    // The vision upload is this encoder's output, so anything the source file
+    // carried (EXIF, GPS, comments) is gone before the bytes leave the machine.
+    let path = fixture("text.png");
+    let decoded = omma::input::read_bytes(&path, 64 * 1024 * 1024, &[]).expect("read fixture");
+    let config = omma::config::Config::default();
+    let image = omma::input::decode("fixture", decoded.0, decoded.1, &config).expect("decode");
+    let png = image.png_bytes().expect("encode");
+
+    for chunk in [
+        b"eXIf".as_slice(),
+        b"iTXt".as_slice(),
+        b"tEXt".as_slice(),
+        b"zTXt".as_slice(),
+    ] {
+        assert!(
+            !png.windows(4).any(|w| w == chunk),
+            "encoded PNG still carries an {} chunk",
+            String::from_utf8_lossy(chunk)
+        );
+    }
+}

@@ -43,10 +43,13 @@ impl Default for Options {
 }
 
 pub fn run(source: &str, config: &Config, options: &Options) -> Result<Report> {
-    if !options.allowed_directories.is_empty() {
-        crate::input::enforce_allowed_roots(source, &options.allowed_directories)?;
-    }
-    let (bytes, file_size) = input::read_bytes(source, config.max_file_size_bytes())?;
+    // The allowlist is enforced inside read_bytes, against the file that was
+    // actually opened, so there is no window to swap a symlink underneath.
+    let (bytes, file_size) = input::read_bytes(
+        source,
+        config.max_file_size_bytes(),
+        &options.allowed_directories,
+    )?;
     run_bytes(source, bytes, file_size, config, options)
 }
 

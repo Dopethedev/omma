@@ -15,6 +15,20 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # Refuses the build when a dependency picks up a published advisory.
+      # The image crate has had two in the past, both long patched; this keeps
+      # that from being discovered by a user instead of by CI.
+      - name: RustSec advisory database
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   msrv:
     name: msrv (${{ matrix.toolchain }})
     runs-on: ubuntu-latest

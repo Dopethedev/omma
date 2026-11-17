@@ -54,7 +54,16 @@ pub fn format_name(format: ImageFormat) -> &'static str {
 }
 
 /// Read the raw bytes of a path, or of stdin when the path is `-`.
-pub fn read_bytes(source: &str, limit: u64) -> Result<(Vec<u8>, u64)> {
+///
+/// When `roots` is non-empty the file is opened first and the check then runs
+/// against the file that was actually opened, not against the path that was
+/// asked for: canonicalizing before opening leaves a window in which a symlink
+/// can be swapped for one that points outside the roots.
+pub fn read_bytes(
+    source: &str,
+    limit: u64,
+    roots: &[std::path::PathBuf],
+) -> Result<(Vec<u8>, u64)> {
     if source == "-" {
         let mut buf = Vec::new();
         std::io::stdin()
@@ -73,10 +82,8 @@ pub fn read_bytes(source: &str, limit: u64) -> Result<(Vec<u8>, u64)> {
     }
 
     let path = Path::new(source);
-    let meta = match std::fs::metadata(path) {
-        Ok(meta) => meta,
-        Err(err) => return Err(map_open_error(path, err)),
-    };
+    let file = std::fs::File::open(path).map_err(|err| map_open_error(path, err))?;
+    let meta = file.metadata().map_err(|err| map_open_error(path, err))?;
     if !meta.is_file() {
         return Err(Error::NotRegularFile(path.to_path_buf()));
     }
@@ -86,7 +93,20 @@ pub fn read_bytes(source: &str, limit: u64) -> Result<(Vec<u8>, u64)> {
             limit,
         });
     }
-    let bytes = std::fs::read(path).map_err(|err| map_open_error(path, err))?;
+    if !roots.is_empty() {
+        require_opened_file_inside(path, &meta, roots)?;
+    }
+
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|err| map_open_error(path, err))?;
+    if bytes.len() as u64 > limit {
+        return Err(Error::TooLarge {
+            size: bytes.len() as u64,
+            limit,
+        });
+    }
     if bytes.is_empty() {
         return Err(Error::EmptyInput);
     }
@@ -332,26 +352,53 @@ pub fn crop(image: DynamicImage, spec: &str) -> Result<(DynamicImage, RegionMeta
     ))
 }
 
-/// Canonicalize the requested path and require it to resolve inside one of the
-/// allowed roots. Canonicalization resolves symlinks first, so a link pointing
-/// out of a root is refused rather than followed.
-pub fn enforce_allowed_roots(source: &str, roots: &[std::path::PathBuf]) -> Result<()> {
-    if source == "-" || roots.is_empty() {
-        return Ok(());
-    }
-    let path = Path::new(source);
+/// Require the file that was opened to live inside one of the allowed roots.
+///
+/// The identity of the opened file (device and inode on Unix) is compared with
+/// what the path resolves to now. A symlink swapped in between the open and the
+/// resolve changes that identity, so the read is refused instead of silently
+/// following the new target out of the allowlist.
+fn require_opened_file_inside(
+    path: &Path,
+    opened: &std::fs::Metadata,
+    roots: &[std::path::PathBuf],
+) -> Result<()> {
     let canonical = std::fs::canonicalize(path).map_err(|err| map_open_error(path, err))?;
+    let mut inside = false;
     for root in roots {
         let Ok(root) = std::fs::canonicalize(root) else {
             continue;
         };
         if canonical.starts_with(&root) {
-            return Ok(());
+            inside = true;
+            break;
         }
     }
-    Err(Error::Usage(format!(
-        "{source} is outside the allowed directories"
-    )))
+    if !inside {
+        return Err(Error::Usage(format!(
+            "{} is outside the allowed directories",
+            path.display()
+        )));
+    }
+    let now = std::fs::metadata(&canonical).map_err(|err| map_open_error(path, err))?;
+    if !same_file(opened, &now) {
+        return Err(Error::Usage(format!(
+            "{} changed while it was being opened",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    a.len() == b.len() && a.modified().ok() == b.modified().ok()
 }
 
 impl Decoded {
@@ -369,4 +416,40 @@ pub fn encode_png(image: &DynamicImage) -> std::result::Result<Vec<u8>, String> 
         .write_to(&mut buffer, ImageFormat::Png)
         .map_err(|err| format!("cannot re-encode image: {err}"))?;
     Ok(buffer.into_inner())
+}
+
+#[cfg(test)]
+mod root_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("omma-root-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        dir
+    }
+
+    #[test]
+    fn the_opened_file_must_be_the_one_the_path_names() {
+        let root = scratch("identity");
+        let inside = root.join("inside.png");
+        std::fs::write(&inside, b"x").expect("write");
+        let outside = std::env::temp_dir().join(format!("omma-outside-{}.png", std::process::id()));
+        std::fs::write(&outside, b"y").expect("write");
+
+        let opened = std::fs::File::open(&inside).expect("open");
+        let meta = opened.metadata().expect("meta");
+        let roots = vec![root.clone()];
+
+        // The file we hold is the one the path names: allowed.
+        require_opened_file_inside(&inside, &meta, &roots).expect("inside file is allowed");
+
+        // A path outside the roots is refused even if we hold a file.
+        let denied = require_opened_file_inside(&outside, &meta, &roots);
+        assert!(denied.is_err(), "a path outside the roots must be refused");
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&outside);
+    }
 }
