@@ -53,6 +53,10 @@ pub struct ImageMeta {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct RegionMeta {
+    /// Why the area was hidden: absent for a box the caller asked for, set to
+    /// `card`, `email` or `phone` when it was detected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<&'static str>,
     pub x: u32,
     pub y: u32,
     pub width: u32,

@@ -99,6 +99,10 @@ pub struct AnalyzeArgs {
     #[arg(long, value_name = "X,Y,W,H", action = clap::ArgAction::Append)]
     pub redact: Vec<String>,
 
+    /// Detect and hide card numbers, email addresses and phone numbers.
+    #[arg(long = "redact-auto")]
+    pub redact_auto: bool,
+
     /// Ask the configured vision model one question about the image.
     #[arg(long, value_name = "QUESTION")]
     pub ask: Option<String>,

@@ -70,6 +70,7 @@ fn analyze(args: AnalyzeArgs) -> Result<i32> {
         ask: question,
         region: args.region.clone(),
         redact: args.redact.clone(),
+        redact_auto: args.redact_auto,
         allowed_directories: config.mcp.allowed_directories.clone(),
         declared_mime: None,
     };

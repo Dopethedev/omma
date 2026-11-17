@@ -21,6 +21,9 @@ pub struct Options {
     pub region: Option<String>,
     /// Rectangles to paint out before any subsystem reads the pixels.
     pub redact: Vec<String>,
+
+    /// Detect card numbers, addresses and phone numbers, and hide them.
+    pub redact_auto: bool,
     /// Directories a path must resolve inside; empty means no restriction.
     pub allowed_directories: Vec<std::path::PathBuf>,
     /// Media type declared by an inline caller; the bytes still decide the format.
@@ -36,6 +39,7 @@ impl Default for Options {
             ask: None,
             region: None,
             redact: Vec::new(),
+            redact_auto: false,
             allowed_directories: Vec::new(),
             declared_mime: None,
         }
@@ -107,11 +111,37 @@ fn run_bytes(
         decoded.image = image;
         decoded.region = Some(region);
     }
-    let redactions = if options.redact.is_empty() {
+    // Auto-detection needs a local OCR pass first: the words it finds are what
+    // gets matched. That pass is local, and the boxes it produces are painted
+    // out before anything else reads the pixels.
+    let mut specs = options.redact.clone();
+    let mut auto_labels: Vec<&'static str> = Vec::new();
+    if options.redact_auto {
+        let width = decoded.image.width();
+        let height = decoded.image.height();
+        let preview = crate::analysis::ocr::analyze(&decoded.image, config);
+        if let Some(ocr) = preview.ocr {
+            for candidate in crate::auto_redact::find(&ocr.words, &ocr.lines, width, height) {
+                specs.push(format!(
+                    "{},{},{},{}",
+                    candidate.x, candidate.y, candidate.width, candidate.height
+                ));
+                auto_labels.push(candidate.label);
+            }
+        }
+    }
+    let mut redactions = if specs.is_empty() {
         Vec::new()
     } else {
-        input::redact(&mut decoded.image, &options.redact)?
+        input::redact(&mut decoded.image, &specs)?
     };
+    // The manual boxes come first, then the detected ones, in the order they
+    // were appended, so the labels line up without tracking indexes.
+    for (offset, label) in auto_labels.iter().enumerate() {
+        if let Some(entry) = redactions.get_mut(options.redact.len() + offset) {
+            entry.source = Some(label);
+        }
+    }
     let decode_ms = decode_started.elapsed().as_millis() as u64;
 
     let mut stages = Stages {

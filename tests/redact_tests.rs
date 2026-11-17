@@ -108,3 +108,37 @@ fn no_boxes_means_no_field_in_the_json() {
         "an empty redaction list should be omitted, not serialised"
     );
 }
+
+#[test]
+fn auto_detection_hides_a_card_number_and_an_address() {
+    if !ocr_available() {
+        eprintln!("skipping: tesseract is not installed");
+        return;
+    }
+    let output = run(&[&fixture("pii.png"), "--json", "--redact-auto"]);
+    assert_eq!(code(&output), 0, "stderr: {}", stderr_text(&output));
+    let report = json_of(&output);
+
+    let text = report["ocr"]["text"].as_str().unwrap_or_default();
+    assert!(
+        !text.contains("4111") && !text.contains("jane@"),
+        "sensitive text survived auto redaction: {text:?}"
+    );
+    assert!(
+        text.contains("998877"),
+        "an unrelated reference number was hidden too: {text:?}"
+    );
+
+    let sources: Vec<&str> = report["redactions"]
+        .as_array()
+        .map(|list| list.iter().filter_map(|r| r["source"].as_str()).collect())
+        .unwrap_or_default();
+    assert!(
+        sources.contains(&"card"),
+        "no card box reported: {sources:?}"
+    );
+    assert!(
+        sources.contains(&"email"),
+        "no email box reported: {sources:?}"
+    );
+}

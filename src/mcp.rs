@@ -42,7 +42,8 @@ const ANALYZE_SCHEMA: &str = r#"{
     "language": { "type": "string", "description": "OCR language(s), e.g. \"eng\" or \"eng+deu\"." },
     "max_colors": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Number of dominant colours." },
     "region": { "type": "string", "description": "Crop to analyze: X,Y,W,H in source pixels." },
-    "redact": { "type": "array", "items": { "type": "string" }, "description": "Hide these rectangles before analysis: X,Y,W,H each, in source pixels (or the crop's pixels when region is set). Redacted areas are absent from OCR, colours, layout and the vision upload." }
+    "redact": { "type": "array", "items": { "type": "string" }, "description": "Hide these rectangles before analysis: X,Y,W,H each, in source pixels (or the crop's pixels when region is set). Redacted areas are absent from OCR, colours, layout and the vision upload." },
+    "redact_auto": { "type": "boolean", "description": "Detect card numbers, email addresses and phone numbers locally and hide them the same way. Every detected area is reported in redactions[] with its source." }
   },
   "required": [],
   "oneOf": [{ "required": ["image_path"] }, { "required": ["image_base64"] }],
@@ -103,6 +104,9 @@ struct AnalyzeParams {
     region: Option<String>,
     #[serde(default)]
     redact: Vec<String>,
+
+    #[serde(default)]
+    redact_auto: bool,
 }
 
 impl ServerHandler for OmmaServer {
@@ -207,6 +211,7 @@ impl OmmaServer {
             layout: params.layout.unwrap_or(true),
             ask,
             region: params.region.clone(),
+            redact_auto: params.redact_auto,
             redact: params.redact.clone(),
             allowed_directories: config.mcp.allowed_directories.clone(),
             declared_mime: params.mime_type.clone(),

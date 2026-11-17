@@ -28,7 +28,7 @@ new major value.
 | `tool` | object | `{ "name": "omma", "version": "x.y.z" }` |
 | `image` | object | measured image metadata |
 | `region` | object \| null | crop applied, when `--region` was used |
-| `redactions` | array \| absent | rectangles actually painted out, each with `x`, `y`, `width`, `height`; a box that ran past the edge is reported clamped, so this is what was covered, not what was asked for |
+| `redactions` | array \| absent | rectangles actually painted out, each with `x`, `y`, `width`, `height`; a box that ran past the edge is reported clamped, so this is what was covered, not what was asked for. `source` is absent for a box the caller asked for and names the match (`card`, `email`, `phone`) for a detected one |
 | `ocr` | object \| null | text and structure, `null` when unavailable/disabled |
 | `colors` | object \| null | palette and statistics |
 | `grid` | object \| null | the spatial colour grid |
