@@ -6,6 +6,7 @@ This release adds image redaction to the CLI and MCP server.
 - `--redact-auto` uses local Tesseract OCR to find and cover card numbers, email addresses, and phone numbers. Detection depends on what OCR can read. The command stops before sending an image to vision if OCR fails or a requested language pack is missing.
 - `redactions` in the JSON report records the covered coordinates and `replacement: "blank"`. Automatically detected areas also include a `source` such as `email`.
 - MCP clients can use `redact` and `redact_auto` with `analyze_image` for both file and inline images.
+- This release updates `cookie` and `url` to patched versions. [Cookie advisory](https://rustsec.org/advisories/RUSTSEC-2026-0594) · [URL advisory](https://rustsec.org/advisories/RUSTSEC-2026-0592)
 
 ```sh
 omma screenshot.png --json --redact 24,36,280,42
