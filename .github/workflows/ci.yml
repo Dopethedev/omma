@@ -61,11 +61,14 @@ jobs:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    env:
+      # Tests spawn multiple OCR processes in parallel on shared runners.
+      OMP_THREAD_LIMIT: "1"
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04    # Keep the release binary compatible with glibc 2.39.
           - os: macos-latest      # arm64
           - os: macos-15-intel   # x86_64
           - os: windows-latest
