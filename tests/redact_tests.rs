@@ -62,6 +62,7 @@ fn every_box_is_recorded_so_the_report_says_what_was_hidden() {
     assert_eq!(boxes[0]["height"], 40);
     assert_eq!(boxes[0]["source_width"], 600);
     assert_eq!(boxes[0]["source_height"], 140);
+    assert_eq!(boxes[0]["replacement"], "blank");
 }
 
 #[test]

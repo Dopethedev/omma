@@ -21,13 +21,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      # Refuses the build when a dependency picks up a published advisory.
-      # The image crate has had two in the past, both long patched; this keeps
-      # that from being discovered by a user instead of by CI.
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version 0.23.0 --locked
       - name: RustSec advisory database
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo audit --file Cargo.lock
 
   msrv:
     name: msrv (${{ matrix.toolchain }})

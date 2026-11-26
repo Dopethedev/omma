@@ -7,7 +7,7 @@ pub mod ocr;
 use std::time::Instant;
 
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::input;
 use crate::report::{ImageMeta, Processing, Report, SCHEMA_VERSION, Stages, Tool, Warning};
 use crate::vision;
@@ -22,7 +22,7 @@ pub struct Options {
     /// Rectangles to paint out before any subsystem reads the pixels.
     pub redact: Vec<String>,
 
-    /// Detect card numbers, addresses and phone numbers, and hide them.
+    /// Detect and hide card numbers, email addresses, and phone numbers.
     pub redact_auto: bool,
     /// Directories a path must resolve inside; empty means no restriction.
     pub allowed_directories: Vec<std::path::PathBuf>,
@@ -120,14 +120,27 @@ fn run_bytes(
         let width = decoded.image.width();
         let height = decoded.image.height();
         let preview = crate::analysis::ocr::analyze(&decoded.image, config);
-        if let Some(ocr) = preview.ocr {
-            for candidate in crate::auto_redact::find(&ocr.words, &ocr.lines, width, height) {
-                specs.push(format!(
-                    "{},{},{},{}",
-                    candidate.x, candidate.y, candidate.width, candidate.height
-                ));
-                auto_labels.push(candidate.label);
-            }
+        let complete = !preview.warnings.iter().any(|warning| {
+            matches!(
+                warning.code,
+                "ocr_language_missing" | "ocr_failed" | "ocr_timeout" | "ocr_structure_unavailable"
+            )
+        });
+        let ocr = preview
+            .ocr
+            .filter(|ocr| complete && (ocr.text.is_empty() || !ocr.words.is_empty()))
+            .ok_or_else(|| {
+                Error::Ocr(
+                    "automatic redaction requires working local OCR and every requested language pack"
+                        .to_string(),
+                )
+            })?;
+        for candidate in crate::auto_redact::find(&ocr.words, &ocr.lines, width, height) {
+            specs.push(format!(
+                "{},{},{},{}",
+                candidate.x, candidate.y, candidate.width, candidate.height
+            ));
+            auto_labels.push(candidate.label);
         }
     }
     let mut redactions = if specs.is_empty() {

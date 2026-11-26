@@ -91,6 +91,43 @@ fn request_body(request: &str) -> serde_json::Value {
 }
 
 #[test]
+fn automatic_redaction_failure_stops_before_the_vision_request() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock");
+    listener.set_nonblocking(true).expect("nonblocking mock");
+    let endpoint = format!(
+        "http://{}/v1/chat/completions",
+        listener.local_addr().expect("addr")
+    );
+    let output = run_env(
+        &[
+            &fixture("pii.png"),
+            "--json",
+            "--no-ocr",
+            "--language",
+            "unlikely_missing_redaction_language",
+            "--redact-auto",
+            "--ask",
+            "What is in this image?",
+        ],
+        &[
+            ("OMMA_VISION_ENDPOINT", &endpoint),
+            ("OMMA_VISION_MODEL", "test-vl"),
+            ("OMMA_VISION_TIMEOUT_SECONDS", "1"),
+        ],
+    );
+    assert_eq!(code(&output), 3, "{}", stderr_text(&output));
+    assert!(stderr_text(&output).contains("automatic redaction requires working local OCR"));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        listener
+            .accept()
+            .expect_err("vision must not be contacted")
+            .kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+
+#[test]
 fn a_local_endpoint_is_asked_with_a_data_uri_and_marked_untrusted() {
     let body = r#"{"choices":[{"message":{"content":"A white box with black text."}}]}"#;
     let (port, requests) = spawn_mock(http_response(body));

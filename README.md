@@ -127,7 +127,7 @@ Or run it from the checkout: `cargo run -- image.png`.
 
 CI builds and tests a release binary on Ubuntu x86_64, macOS arm64, macOS x86_64
 and Windows x86_64, and publishes it with a `.sha256` per platform (see
-[docs/release-notes-0.2.0.md](docs/release-notes-0.2.0.md)). The Linux binary is
+[docs/release-notes-0.3.0.md](docs/release-notes-0.3.0.md)). The Linux binary is
 dynamically linked and needs glibc 2.39 or newer; the source build has no such
 constraint.
 
@@ -185,7 +185,7 @@ documented in [docs/json-schema.md](docs/json-schema.md).
 ```json
 {
   "schema_version": "1.0",
-  "tool": { "name": "omma", "version": "0.2.0" },
+  "tool": { "name": "omma", "version": "0.3.0" },
   "image": {
     "filename": "screenshot.png", "format": "png",
     "width": 779, "height": 337, "aspect_ratio": 2.3116,
@@ -426,9 +426,10 @@ See [docs/mcp.md](docs/mcp.md) for the MCP boundary and
   them, so the covered area is missing from OCR, colours, layout *and* the copy
   sent to a vision model. It is the only way to keep details out of a hosted
   model today: cropping changes what the model sees, redaction changes both.
-  `--redact-auto` finds card numbers, email addresses and phone numbers with a
-  local OCR pass first, then hides them the same way; each detected area is
-  reported in `redactions[]` with its `source`.
+  `--redact-auto` uses local OCR to find and hide card numbers, email addresses
+  and phone numbers. Each detected area is reported in `redactions[]` with its
+  `source`. Unreadable text can escape detection. If OCR fails or a requested
+  language pack is missing, Omma stops before sending any image to vision.
   A box that runs past the edge is clamped to the frame, and the report carries
   the clamped rectangle, so the JSON always says what was actually covered. A
   zero-size box, or one outside the image, is refused with exit 2 rather than

@@ -52,6 +52,7 @@ Input schema (`additionalProperties: false`; supply exactly one of `image_path` 
 | `max_colors` | integer 1–64 | configured | Dominant colours |
 | `region` | string | — | `X,Y,W,H` crop in source pixels |
 | `redact` | array of strings | — | `X,Y,W,H` boxes painted out before analysis |
+| `redact_auto` | boolean | false | Use local OCR to detect and hide card numbers, email addresses and phone numbers. Returns a tool error before any vision request if OCR cannot complete |
 
 Returns the full report described in [json-schema.md](json-schema.md), both as
 text content and as `structuredContent`.

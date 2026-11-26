@@ -117,6 +117,11 @@ pub fn read_bytes(
 fn map_open_error(path: &Path, err: std::io::Error) -> Error {
     match err.kind() {
         std::io::ErrorKind::NotFound => Error::NotFound(path.to_path_buf()),
+        // Windows can reject opening a directory before we can inspect the handle.
+        #[cfg(windows)]
+        std::io::ErrorKind::PermissionDenied if path.is_dir() => {
+            Error::NotRegularFile(path.to_path_buf())
+        }
         std::io::ErrorKind::PermissionDenied => Error::Permission(path.to_path_buf()),
         _ => Error::Io {
             path: path.to_path_buf(),
